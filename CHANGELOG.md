@@ -1,5 +1,43 @@
 # Changelog
 
+## 2026-09-22 — Milestone 1 : l'Archivist devient asynchrone, plafond par personnage, horloge narrative
+
+Premier jalon qui ajoute vraiment quelque chose (pas seulement un portage) —
+voir la section « Migration plan » du doc de conception. Trois livrables :
+
+- **L'Archivist tourne en tâche de fond.** L'extraction de faits
+  (`new_facts`) était jusqu'ici noyée dans le même appel modèle que la mise à
+  jour des objets suivis / secretInfo — un appel que le joueur attend
+  forcément. Elle a maintenant son propre prompt (`buildArchivistPrompt`,
+  `roles/archivist.js`) et son propre appel, déclenché *après* que le tour
+  soit déjà persisté et renvoyé au joueur, sans jamais être attendu
+  (`fireArchivist` dans `gameEngine.js`) — un échec ou une lenteur de
+  l'Archivist ne peut plus ralentir ni casser un tour. `roles/archivist.js`
+  est volontairement autonome (son propre appel modèle, son propre suivi de
+  coûts) plutôt que de dépendre de `gameEngine.js`, pour éviter un require
+  circulaire et respecter la frontière de module que le doc demande.
+- **Les faits par personnage sont désormais plafonnés**, exactement comme le
+  pool général (`RELEVANT_FACTS_LIMIT`, les plus récents d'abord) — c'est le
+  correctif direct du bug de production qui avait fait déborder le contexte
+  d'un modèle Ollama local : un personnage récurrent sur une longue partie
+  accumulait des faits sans limite. Vérifié avec un test synthétique (200
+  faits injectés pour un seul personnage) : le contexte réellement envoyé au
+  modèle reste plafonné à 20, en gardant les plus récents.
+- **L'horloge narrative (`story_clock`)** est ajoutée au schéma de l'appel
+  d'état et remplie par le Writer à chaque tour (`current_date`,
+  `elapsed_description`, table `storyClock`) — rien ne la lit encore
+  (Milestone 3, le Proofreader), mais elle est déjà alimentée honnêtement
+  pour ne nécessiter aucune migration plus tard.
+
+`lib/memoryFacts.js` (nouveau) porte les helpers de forme des faits
+(`normalizeNewFact`/`newMemoryFact`), partagés entre `gameEngine.js` et
+`roles/archivist.js` sans dépendance circulaire entre les deux.
+
+Vérifié de bout en bout : latence d'un tour inchangée par rapport au
+Milestone 0 (l'appel Archivist n'est jamais attendu), plafond par personnage
+confirmé sur un test synthétique à 200 faits, `storyClock` correctement mis
+à jour à chaque tour et nettoyé à la suppression d'une sauvegarde.
+
 ## 2026-09-22 — Milestone 0 : socle du nouveau dépôt, parité avec Fogbound
 
 Nouveau dépôt, nouveau nom (« Trame », choisi pour évoquer la technique

@@ -93,13 +93,17 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 
 -- New per the V2 design doc's Data model section -- one row per save,
--- unpopulated until Milestone 3 (the story clock). Created now so standing
--- up SQLite from day one (per "What changes in the new environment") never
--- needs a second schema migration to add it later.
+-- populated every turn starting Milestone 1 (nothing reads it until
+-- Milestone 3's Proofreader). `id` always equals the save's id (there's
+-- inherently at most one row per save) so this table fits the same
+-- id-keyed CollectionRef machinery as every other table in lib/db.js,
+-- rather than needing its own special case there.
 CREATE TABLE IF NOT EXISTS storyClock (
-  saveId TEXT PRIMARY KEY,
+  id TEXT PRIMARY KEY,
+  saveId TEXT NOT NULL,
   data TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_storyClock_saveId ON storyClock(saveId);
 
 -- New per the V2 design doc -- versioned, one active row per save + history,
 -- unpopulated until Milestone 3 (the Mastermind).

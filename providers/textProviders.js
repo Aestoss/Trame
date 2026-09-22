@@ -521,12 +521,14 @@ async function callMock({ system, user }) {
   const actionMatch = user.match(/(?:PLAYER ACTION THIS TURN|AUTHOR INSTRUCTION THIS TURN[^:]*): (.*)/);
   const action = (actionMatch && actionMatch[1]) || '';
 
-  // Narration/state split (see lib/promptBuilder.js buildNarrationPrompt/
-  // buildStatePrompt) — detected by their distinctive system-prompt markers
-  // so the mock produces the matching shape instead of falling into the
-  // single-call hooks below, which would return the old, incompatible shape.
+  // Narration/state/archivist split (see lib/promptBuilder.js
+  // buildNarrationPrompt/buildStatePrompt/buildArchivistPrompt) — detected
+  // by their distinctive system-prompt markers so the mock produces the
+  // matching shape instead of falling into the single-call hooks below,
+  // which would return the old, incompatible shape.
   const isNarration = /===CHAPTER===/.test(system || '');
   const isState = /You maintain the hidden bookkeeping/.test(system || '');
+  const isArchivist = /You extract structured facts from a single chapter/.test(system || '');
 
   if (isNarration) {
     if (/\bwin\b/i.test(action)) {
@@ -554,15 +556,28 @@ async function callMock({ system, user }) {
         secret_info: tookLantern ? 'Keeper Oduya left the lantern out on purpose, to see who would take it.' : '',
         state_updates: {
           location: 'Lighthouse steps',
-          // Exercises the { fact, character, type } shape (see
-          // buildStateMasterPrompt's NEW FACTS section) rather than only ever
-          // sending an empty array — otherwise the mock provider would never
-          // catch a regression in how gameEngine.js stores/renders these.
-          new_facts: tookLantern ? [{ fact: 'Keeper Oduya has tended the lighthouse for eleven years.', character: 'Keeper Oduya', type: 'biographical' }] : [],
           characters_changed: [],
           inventory_changed: tookLantern ? ['+ brass lantern'] : []
         },
+        // Exercises a non-null value on the lantern turn specifically, so the
+        // mock provider would catch a regression in how gameEngine.js
+        // upserts storyClock, the same reasoning as new_facts below.
+        story_clock: tookLantern ? { current_date: null, elapsed_description: 'a moment later' } : { current_date: null, elapsed_description: null },
         image_prompt: 'A foggy lighthouse at dusk, glass architecture, a lone figure on stone steps'
+      })
+    };
+  }
+
+  if (isArchivist) {
+    const tookLantern = /take the lantern/i.test(user);
+    return {
+      usage: noUsage,
+      // Exercises the { fact, character, type } shape (see
+      // buildArchivistPrompt's NEW FACTS section) rather than only ever
+      // sending an empty array — otherwise the mock provider would never
+      // catch a regression in how the Archivist stores/renders these.
+      text: JSON.stringify({
+        new_facts: tookLantern ? [{ fact: 'Keeper Oduya has tended the lighthouse for eleven years.', character: 'Keeper Oduya', type: 'biographical' }] : []
       })
     };
   }
@@ -576,7 +591,8 @@ async function callMock({ system, user }) {
         game_over: { result: 'victory', text: null },
         tracked_item_updates: [],
         secret_info: '',
-        state_updates: { location: null, new_facts: [], characters_changed: [], inventory_changed: [] },
+        state_updates: { location: null, characters_changed: [], inventory_changed: [] },
+        story_clock: { current_date: null, elapsed_description: null },
         image_prompt: null,
         suggested_actions: []
       })
@@ -592,7 +608,8 @@ async function callMock({ system, user }) {
         game_over: { result: 'defeat', text: null },
         tracked_item_updates: [],
         secret_info: '',
-        state_updates: { location: null, new_facts: [], characters_changed: [], inventory_changed: [] },
+        state_updates: { location: null, characters_changed: [], inventory_changed: [] },
+        story_clock: { current_date: null, elapsed_description: null },
         image_prompt: null,
         suggested_actions: []
       })
@@ -608,7 +625,8 @@ async function callMock({ system, user }) {
         game_over: null,
         tracked_item_updates: [{ name: 'Inventory', new_value: 'a small brass lantern' }, { name: 'Keeper Trust', new_value: 4 }],
         secret_info: 'Keeper Oduya left the lantern out on purpose, to see who would take it.',
-        state_updates: { location: null, new_facts: [], characters_changed: [], inventory_changed: ['+ brass lantern'] },
+        state_updates: { location: null, characters_changed: [], inventory_changed: ['+ brass lantern'] },
+        story_clock: { current_date: null, elapsed_description: 'a moment later' },
         image_prompt: null,
         suggested_actions: ['Ask why she\'s watching you', 'Light the lantern', 'Put it back']
       })
@@ -624,7 +642,8 @@ async function callMock({ system, user }) {
       game_over: null,
       tracked_item_updates: [],
       secret_info: '',
-      state_updates: { location: 'Lighthouse steps', new_facts: [], characters_changed: [], inventory_changed: [] },
+      state_updates: { location: 'Lighthouse steps', characters_changed: [], inventory_changed: [] },
+      story_clock: { current_date: null, elapsed_description: null },
       image_prompt: 'A foggy lighthouse at dusk, glass architecture, a lone figure on stone steps',
       suggested_actions: ['Call out to the Keeper', 'Climb the steps', 'Look for another way in']
     })

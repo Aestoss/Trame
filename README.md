@@ -10,10 +10,11 @@ plutôt que par troncature, plan de migration en 5 étapes). Inspirée
 également d'[Infinite Worlds](https://infiniteworlds.app) (voir
 `docs/INFINITE_WORLDS_REFERENCE.md`).
 
-**Statut actuel : Milestone 0 (socle + parité V1).** Tout ce qui existait
-dans Fogbound a été porté ici sur une base SQLite — aucun des nouveaux rôles
-(Archivist, Retriever, Proofreader, Mastermind) n'est encore implémenté
-(voir `roles/`, chacun documente son propre jalon). Pas encore déployé.
+**Statut actuel : Milestone 1.** L'Archivist tourne (extraction de faits
+asynchrone, hors du chemin critique du joueur), les faits par personnage
+sont plafonnés, et l'horloge narrative (`storyClock`) est alimentée à chaque
+tour. Retriever, Proofreader et Mastermind restent à implémenter (voir
+`roles/`, chacun documente son propre jalon). Pas encore déployé.
 
 ## Fonctionnalités
 
@@ -40,10 +41,11 @@ dans Fogbound a été porté ici sur une base SQLite — aucun des nouveaux rôl
   IA-seule) et permet de parler directement au narrateur, hors-personnage.
 - **Objets/état suivis** typés (inventaire, jauges de relation...),
   visibles par le joueur ou réservés à l'IA.
-- **Mémoire structurée** : faits extraits stockés en base + résumé
-  automatique des tours anciens. La bascule vers une vraie récupération par
-  similarité (au lieu d'un plafond par récence) arrive au Milestone 2 — voir
-  le doc de conception.
+- **Mémoire structurée** : faits extraits par l'Archivist (async, hors du
+  chemin critique du joueur) + résumé automatique des tours anciens, avec un
+  plafond par personnage en plus du pool général. La bascule vers une vraie
+  récupération par similarité (au lieu d'un plafond par récence) arrive au
+  Milestone 2 — voir le doc de conception.
 - **Interface traduite** (français/anglais) suivant le réglage de langue,
   installable comme PWA sur téléphone.
 - **Suivi des coûts** IA (jetons + estimation $) et fournisseurs
@@ -81,12 +83,13 @@ lib/schema.sql                → schéma des tables
 lib/backup.js                 → sauvegardes glissantes de trame.db
 lib/promptBuilder.js         → assemblage des prompts en couches envoyés à l'IA
 lib/gameEngine.js            → logique de jeu : mondes, sauvegardes, tours, mémoire
+lib/memoryFacts.js            → forme partagée des faits mémoire (gameEngine.js + roles/archivist.js)
 lib/pricing.js               → tarifs approximatifs $/1M tokens par fournisseur
 lib/costTracker.js           → enregistrement et agrégation des coûts d'appels IA
 providers/textProviders.js   → Anthropic / OpenAI / OpenRouter / Gemini / Ollama / démo
 providers/imageProviders.js  → Stability / Replicate / Stable Diffusion local / démo
-roles/                        → Writer (actif) + Archivist/Retriever/Proofreader/Mastermind
-                                 (chacun un stub qui documente son propre jalon de migration)
+roles/                        → Writer + Archivist (actifs) ; Retriever/Proofreader/Mastermind
+                                 sont des stubs qui documentent leur propre jalon de migration
 public/                      → interface (HTML/CSS/JS), installable en PWA
 scripts/windows/              → pont PC local (Ollama/Forge/Chroma, tunnel Tailscale)
 docs/INFINITE_WORLDS_REFERENCE.md → analyse de référence ayant guidé la conception
