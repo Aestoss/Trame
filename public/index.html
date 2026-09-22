@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Trame — aventure IA</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#12141c">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <span class="brand">Trame</span>
+  <button id="settingsBtn" class="icon-btn" data-i18n-title="settingsBtn">⚙</button>
+</header>
+
+<main id="app">
+
+  <!-- Home: create / worlds / saves, as separate tabs -->
+  <section id="view-home" class="view">
+    <div class="home-tabs" role="tablist">
+      <button class="home-tab-btn" id="homeTabBtnCreate" data-tab="create" data-i18n="tabCreate" role="tab"></button>
+      <button class="home-tab-btn" id="homeTabBtnWorlds" data-tab="worlds" data-i18n="tabWorlds" role="tab"></button>
+      <button class="home-tab-btn" id="homeTabBtnSaves" data-tab="saves" data-i18n="tabSaves" role="tab"></button>
+    </div>
+
+    <div id="homeTabCreate" class="home-tab-panel">
+      <div class="create-panel">
+        <h2 data-i18n="createPanelTitle"></h2>
+        <p class="hint" data-i18n="createPanelHint"></p>
+        <textarea id="ideaInput" rows="3" data-i18n-placeholder="ideaInputPlaceholder"></textarea>
+        <label data-i18n="worldLanguageLabel" for="worldLanguageSelect"></label>
+        <select id="worldLanguageSelect">
+          <option value="fr">Français</option>
+          <option value="en">English</option>
+        </select>
+        <button id="createWorldBtn" class="primary-btn" data-i18n="createWorldBtn"></button>
+        <div id="creationProgress" class="creation-progress hidden">
+          <div class="progress-bar"><div class="progress-bar-fill"></div></div>
+          <p id="creationProgressText" class="hint"></p>
+        </div>
+      </div>
+    </div>
+
+    <div id="homeTabWorlds" class="home-tab-panel hidden">
+      <p class="hint" data-i18n="worldsTabHint"></p>
+      <div id="worldList" class="world-list"></div>
+    </div>
+
+    <div id="homeTabSaves" class="home-tab-panel hidden">
+      <div id="saveList" class="save-list"></div>
+      <p id="noSavesHint" class="hint" data-i18n="noSavesHint"></p>
+    </div>
+  </section>
+
+  <!-- Background popup: shown once when a new adventure starts, before the
+       real first (AI-generated) chapter, which is prefetched behind it. -->
+  <div id="backgroundModal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <h2 id="backgroundModalTitle" data-i18n="backgroundModalTitle"></h2>
+      <div id="backgroundModalText" class="modal-text"></div>
+      <button id="backgroundModalCloseBtn" class="primary-btn big-btn" data-i18n="backgroundModalCloseBtn"></button>
+    </div>
+  </div>
+
+  <!-- Character selection view -->
+  <section id="view-character-select" class="view hidden">
+    <button id="backFromCharSelectBtn" class="text-btn" data-i18n="backToStories"></button>
+    <h2 id="charSelectTitle">Choisis ton personnage</h2>
+    <p id="characterSelectText" class="hint hidden"></p>
+    <div id="matureWarning" class="mature-warning hidden"></div>
+    <div id="characterList" class="character-list"></div>
+  </section>
+
+  <!-- Story / play view -->
+  <section id="view-story" class="view hidden">
+    <div class="story-header-row">
+      <button id="backBtn" class="text-btn" data-i18n="backToStories"></button>
+    </div>
+    <h2 id="storyTitle"></h2>
+    <p id="storyCharacter" class="story-character hidden"></p>
+    <p id="storyObjective" class="story-objective hidden"></p>
+
+    <!-- The turn's own text always comes first -- everything else about the
+         turn (reveal/edit, secret info, image, tracked items, actions) is
+         secondary and follows below it. -->
+    <div id="pageContent" class="chapter-feed"></div>
+    <div id="gameOverBanner" class="game-over-banner hidden"></div>
+
+    <div class="turn-icon-row">
+      <button id="authorModeBtn" class="icon-btn" data-i18n-title="authorModeBtn">🔍</button>
+      <button id="editWorldBtn" class="icon-btn" data-i18n-title="editWorldBtn">✏️</button>
+      <button id="purgeImagesBtn" class="icon-btn" data-i18n-title="purgeImagesBtn">🗑️🖼️</button>
+    </div>
+    <p id="purgeImagesStatus" class="hint hidden"></p>
+    <div id="secretInfoBox" class="secret-info-box hidden"></div>
+    <div id="storyImage" class="story-image hidden"><img id="storyImageEl" alt=""></div>
+    <div id="trackedItemsPanel" class="tracked-items-panel hidden"></div>
+
+    <!-- Not nested inside pastPageActions/latestPageActions: regenerateBtn
+         lives in the always-visible turn-nav below and works on both a past
+         page and the latest one, so this popover must stay reachable
+         regardless of which of the two blocks below is hidden. -->
+    <div id="regeneratePopover" class="regenerate-popover hidden">
+      <p id="regenerateWarning" class="regenerate-warning hidden"></p>
+      <label><span data-i18n="regenerateActionLabel"></span><textarea rows="1" id="regenerateActionInput"></textarea></label>
+      <label><span data-i18n="regenerateNoteLabel"></span> <span class="hint-inline" data-i18n="regenerateNoteHint"></span>
+        <textarea rows="1" id="regenerateNoteInput"></textarea>
+      </label>
+      <div class="regenerate-popover-actions">
+        <button id="regenerateConfirmBtn" class="primary-btn" data-i18n="regenerateConfirmBtn"></button>
+        <button id="regenerateCancelBtn" class="text-btn" data-i18n="cancelBtn"></button>
+      </div>
+    </div>
+
+    <div id="pastPageActions" class="past-page-actions hidden">
+      <button id="resumeFromPageBtn" class="primary-btn" data-i18n="resumeFromPageBtn"></button>
+      <p class="hint" data-i18n="resumeFromPageHint"></p>
+    </div>
+
+    <div id="latestPageActions" class="latest-page-actions">
+      <div id="suggestedActions" class="suggested-actions"></div>
+      <form id="actionForm">
+        <div class="segmented-card">
+          <label class="segment action">
+            <span class="segment-icon" aria-hidden="true">🎯</span>
+            <span class="segment-body">
+              <span class="segment-label" data-i18n="actionSegmentLabel"></span>
+              <textarea id="actionInput" rows="1" data-i18n-placeholder="actionInputPlaceholder" autocomplete="off"></textarea>
+            </span>
+          </label>
+          <label class="segment instruction">
+            <span class="segment-icon" aria-hidden="true">🖋️</span>
+            <span class="segment-body">
+              <span class="segment-label" data-i18n="instructionSegmentLabel"></span>
+              <textarea id="instructionInput" rows="1" data-i18n-placeholder="instructionPlaceholder" autocomplete="off"></textarea>
+            </span>
+          </label>
+        </div>
+        <button type="submit" class="primary-btn send-btn" data-i18n="sendBtn"></button>
+      </form>
+    </div>
+
+    <!-- Shown on every page, latest or past, game-over or not -- position in
+         the story and the ability to move through it don't depend on any of
+         that. -->
+    <div class="turn-nav">
+      <div id="pageIndicator" class="turn-indicator"></div>
+      <div class="nav-row3">
+        <button id="prevPageBtn" class="nav-link" data-i18n-title="prevPageBtn">‹ <span data-i18n="prevTurnLabel"></span></button>
+        <button id="regenerateBtn" class="nav-link center" data-i18n-title="regenerateBtn">🔄 <span data-i18n="regenerateLabel"></span></button>
+        <button id="nextPageBtn" class="nav-link right" data-i18n-title="nextPageBtn"><span data-i18n="nextTurnLabel"></span> ›</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- World editor: opens right after creating a world, and via ✏️ later -->
+  <section id="view-world-edit" class="view hidden">
+    <button id="closeWorldEditBtn" class="text-btn" data-i18n="backGeneric"></button>
+    <h2 id="worldEditTitle">Éditer le monde</h2>
+    <p id="worldLanguageInfo" class="hint"></p>
+    <p id="worldVersionInfo" class="hint"></p>
+
+    <div class="settings-group">
+      <h3 data-i18n="worldEditInfoHeading"></h3>
+      <label><span data-i18n="worldTitleLabel"></span>
+        <input id="worldTitleInput" type="text">
+      </label>
+      <div id="worldCoverWrap" class="story-image hidden"><img id="worldCoverImg" alt=""></div>
+      <div class="image-actions-row">
+        <button id="regenerateCoverBtn" class="text-btn" data-i18n="regenerateCoverBtn"></button>
+        <button id="toggleCoverPromptBtn" class="text-btn" data-i18n="editCoverPromptBtn"></button>
+      </div>
+      <p id="coverStatus" class="hint"></p>
+      <div id="coverPromptPanel" class="image-prompt-panel hidden">
+        <label><span data-i18n="imagePromptLabel"></span>
+          <textarea id="coverPromptInput" rows="3"></textarea>
+        </label>
+        <div class="image-actions-row">
+          <button id="coverPromptPreviewBtn" class="text-btn" data-i18n="generatePreviewBtn"></button>
+        </div>
+        <div id="coverPromptPreviewWrap" class="story-image hidden"><img id="coverPromptPreviewImg" alt=""></div>
+        <div id="coverPromptValidateActions" class="image-actions-row hidden">
+          <button id="coverPromptAcceptBtn" class="primary-btn" data-i18n="validateImageBtn"></button>
+          <button id="coverPromptDiscardBtn" class="text-btn" data-i18n="discardPreviewBtn"></button>
+        </div>
+        <p id="coverPromptStatus" class="hint"></p>
+      </div>
+      <label><span data-i18n="worldDescriptionLabel"></span> <span class="hint-inline" data-i18n="worldDescriptionHint"></span>
+        <textarea id="worldDescriptionInput" rows="2"></textarea>
+      </label>
+      <label><span data-i18n="worldObjectiveLabel"></span> <span class="hint-inline" data-i18n="worldObjectiveHint"></span>
+        <input id="worldObjectiveInput" type="text">
+      </label>
+      <label><span data-i18n="worldBackgroundLabel"></span> <span class="hint-inline" data-i18n="worldBackgroundHint"></span>
+        <textarea id="worldBackgroundInput" rows="4"></textarea>
+      </label>
+      <label><span data-i18n="worldFirstActionLabel"></span> <span class="hint-inline" data-i18n="worldFirstActionHint"></span>
+        <input id="worldFirstActionInput" type="text">
+      </label>
+      <label class="toggle-row"><span data-i18n="worldMatureLabel"></span><input id="worldMatureInput" type="checkbox"></label>
+      <label><span data-i18n="worldContentWarningsLabel"></span> <span class="hint-inline" data-i18n="worldContentWarningsHint"></span>
+        <input id="worldContentWarningsInput" type="text" data-i18n-placeholder="worldContentWarningsPlaceholder">
+      </label>
+      <label><span data-i18n="worldCharacterSelectTextLabel"></span> <span class="hint-inline" data-i18n="worldCharacterSelectTextHint"></span>
+        <input id="worldCharacterSelectTextInput" type="text">
+      </label>
+      <label><span data-i18n="worldImageModelLabel"></span> <span class="hint-inline" data-i18n="worldImageModelHint"></span>
+        <select id="worldImageModelPreset">
+          <option value="" data-i18n="modelPresetCustom"></option>
+        </select>
+        <input id="worldImageModelInput" type="text" data-i18n-placeholder="worldImageModelPlaceholder">
+      </label>
+      <label><span data-i18n="worldDesignNotesLabel"></span> <span class="hint-inline" data-i18n="worldDesignNotesHint"></span>
+        <textarea id="worldDesignNotesInput" rows="2"></textarea>
+      </label>
+      <label><span data-i18n="worldSettingLabel"></span> <span class="hint-inline" data-i18n="worldSettingHint"></span>
+        <textarea id="worldSettingInput" rows="3"></textarea>
+      </label>
+      <label><span data-i18n="worldToneLabel"></span> <span class="hint-inline" data-i18n="worldToneHint"></span>
+        <input id="worldToneInput" type="text">
+      </label>
+      <label><span data-i18n="worldRulesLabel"></span> <span class="hint-inline" data-i18n="worldRulesHint"></span>
+        <textarea id="worldRulesInput" rows="3"></textarea>
+      </label>
+      <label><span data-i18n="worldInstructionsLabel"></span>
+        <textarea id="worldInstructionsInput" rows="10"></textarea>
+      </label>
+      <label><span data-i18n="worldAuthorStyleLabel"></span> <span class="hint-inline" data-i18n="worldAuthorStyleHint"></span>
+        <input id="worldAuthorStyleInput" type="text">
+      </label>
+      <label><span data-i18n="worldImageStyleLabel"></span> <span class="hint-inline" data-i18n="worldImageStyleHint"></span>
+        <input id="worldImageStyleInput" type="text">
+      </label>
+      <label><span data-i18n="worldImageStylePrefixLabel"></span> <span class="hint-inline" data-i18n="worldImageStylePrefixHint"></span>
+        <input id="worldImageStylePrefixInput" type="text">
+      </label>
+      <label><span data-i18n="worldImageStyleSuffixLabel"></span> <span class="hint-inline" data-i18n="worldImageStyleSuffixHint"></span>
+        <input id="worldImageStyleSuffixInput" type="text">
+      </label>
+      <button id="saveWorldEditBtn" class="primary-btn" data-i18n="saveBtn"></button>
+      <p id="worldEditStatus" class="hint"></p>
+    </div>
+
+    <div class="settings-group">
+      <h3 data-i18n="worldSkillsHeading"></h3>
+      <p class="hint" data-i18n="worldSkillsHint"></p>
+      <div id="worldSkillsList" class="skills-edit-list"></div>
+      <button id="addSkillBtn" class="text-btn" data-i18n="addSkillBtn"></button>
+    </div>
+
+    <div class="settings-group">
+      <h3 data-i18n="victoryDefeatHeading"></h3>
+      <label><span data-i18n="worldVictoryConditionLabel"></span> <span class="hint-inline" data-i18n="worldConditionHint"></span>
+        <textarea id="worldVictoryConditionInput" rows="2"></textarea>
+      </label>
+      <label><span data-i18n="worldVictoryTextLabel"></span>
+        <textarea id="worldVictoryTextInput" rows="2"></textarea>
+      </label>
+      <label><span data-i18n="worldDefeatConditionLabel"></span> <span class="hint-inline" data-i18n="worldConditionHint"></span>
+        <textarea id="worldDefeatConditionInput" rows="2"></textarea>
+      </label>
+      <label><span data-i18n="worldDefeatTextLabel"></span>
+        <textarea id="worldDefeatTextInput" rows="2"></textarea>
+      </label>
+    </div>
+
+    <div class="settings-group">
+      <h3 data-i18n="trackedItemsHeading"></h3>
+      <p class="hint" data-i18n="trackedItemsHint"></p>
+      <div id="trackedItemsEditList" class="tracked-item-edit-list"></div>
+      <button id="addTrackedItemBtn" class="text-btn" data-i18n="addTrackedItemBtn"></button>
+    </div>
+
+    <div class="settings-group">
+      <h3 data-i18n="npcsHeading"></h3>
+      <p class="hint" data-i18n="npcsHint"></p>
+      <div id="npcEditList" class="npc-edit-list"></div>
+      <button id="addNpcBtn" class="text-btn" data-i18n="addNpcBtn"></button>
+    </div>
+
+    <div class="settings-group">
+      <h3 data-i18n="worldAiEditHeading"></h3>
+      <p class="hint" data-i18n="worldAiEditHint"></p>
+      <textarea id="worldAiEditInput" rows="2" data-i18n-placeholder="worldAiEditPlaceholder"></textarea>
+      <button id="worldAiEditBtn" class="primary-btn" data-i18n="worldAiEditBtn"></button>
+      <p id="worldAiEditStatus" class="hint"></p>
+    </div>
+
+    <div class="settings-group">
+      <h3 data-i18n="playableCharactersHeading"></h3>
+      <div id="editCharacterList" class="character-edit-list"></div>
+      <button id="addCharacterBtn" class="text-btn" data-i18n="addCharacterBtn"></button>
+      <div class="ai-character-gen">
+        <input id="aiCharacterDescInput" type="text" data-i18n-placeholder="aiCharacterDescPlaceholder">
+        <button id="generateCharacterBtn" class="primary-btn" data-i18n="generateCharacterBtn"></button>
+      </div>
+      <p id="characterEditStatus" class="hint"></p>
+    </div>
+
+    <button id="startAdventureBtn" class="primary-btn big-btn" data-i18n="startAdventureBtn"></button>
+    <button id="deleteWorldBtn" class="text-btn danger-text" data-i18n="deleteWorldBtn"></button>
+  </section>
+
+  <!-- Settings view -->
+  <section id="view-settings" class="view hidden">
+    <button id="closeSettingsBtn" class="text-btn" data-i18n="backGeneric"></button>
+    <h2 data-i18n="settingsHeading"></h2>
+
+    <div class="settings-group">
+      <h3 data-i18n="settingsTextHeading"></h3>
+      <label><span data-i18n="responseLanguageLabel"></span>
+        <select id="responseLanguage">
+          <option value="fr">Français</option>
+          <option value="en">English</option>
+        </select>
+      </label>
+      <label><span data-i18n="chapterLengthLabelText"></span> <span id="chapterLengthLabel" class="hint-inline"></span>
+        <input type="range" id="chapterLengthSlider" min="100" max="1000" step="100" value="400">
+      </label>
+      <label><span data-i18n="providerLabel"></span>
+        <select id="textProvider">
+          <option value="mock" data-i18n="providerMock"></option>
+          <option value="anthropic">Anthropic (Claude)</option>
+          <option value="openai">OpenAI</option>
+          <option value="openrouter" data-i18n="providerOpenrouter"></option>
+          <option value="gemini">Google (Gemini)</option>
+          <option value="ollama" data-i18n="providerOllama"></option>
+        </select>
+      </label>
+      <label><span data-i18n="modelPresetLabel"></span>
+        <select id="textModelPreset">
+          <option value="" data-i18n="modelPresetCustom"></option>
+        </select>
+      </label>
+      <label><span data-i18n="modelLabel"></span> <span class="hint-inline" data-i18n="modelHint"></span>
+        <input id="textModel" type="text" placeholder="ex : claude-sonnet-4-6">
+      </label>
+      <label class="key-field"><span data-i18n="keyAnthropicLabel"></span> <input id="key-anthropic" type="password" placeholder="sk-ant-..."></label>
+      <label class="key-field"><span data-i18n="keyOpenaiLabel"></span> <input id="key-openai" type="password" placeholder="sk-..."></label>
+      <label class="key-field"><span data-i18n="keyOpenrouterLabel"></span> <input id="key-openrouter" type="password" placeholder="sk-or-..."></label>
+      <label class="key-field"><span data-i18n="keyGeminiLabel"></span> <span class="hint-inline" data-i18n="keyGeminiHint"></span><input id="key-gemini" type="password" placeholder="AIza..."></label>
+      <label class="key-field"><span data-i18n="ollamaBaseUrlLabel"></span> <span class="hint-inline" data-i18n="ollamaBaseUrlHint"></span><input id="ollamaBaseUrl" type="text" placeholder="http://localhost:11434"></label>
+      <label class="key-field"><span data-i18n="keyOllamaLabel"></span> <span class="hint-inline" data-i18n="keyOllamaHint"></span><input id="key-ollama" type="password" placeholder="(optionnel)"></label>
+      <div id="ollamaStatusRow" class="ollama-status-row">
+        <span id="ollamaStatusDot" class="status-dot status-dot-offline"></span>
+        <span id="ollamaStatusText" data-i18n="ollamaStatusOffline"></span>
+        <button type="button" id="ollamaRefreshBtn" class="text-btn small-btn" data-i18n="ollamaRefreshBtn"></button>
+      </div>
+      <label><span data-i18n="fallbackProviderLabel"></span> <span class="hint-inline" data-i18n="fallbackProviderHint"></span>
+        <select id="fallbackProvider">
+          <option value="" data-i18n="fallbackProviderNone"></option>
+          <option value="anthropic">Anthropic (Claude)</option>
+          <option value="openai">OpenAI</option>
+          <option value="openrouter" data-i18n="providerOpenrouter"></option>
+          <option value="gemini">Google (Gemini)</option>
+        </select>
+      </label>
+      <label><span data-i18n="fallbackModelLabel"></span> <span class="hint-inline" data-i18n="modelHint"></span>
+        <input id="fallbackModel" type="text" placeholder="ex : claude-sonnet-4-6">
+      </label>
+    </div>
+
+    <div class="settings-group">
+      <h3 data-i18n="settingsImagesHeading"></h3>
+      <label class="toggle-row">
+        <span data-i18n="imagesEnabledLabel"></span>
+        <input id="imagesEnabled" type="checkbox">
+      </label>
+      <label><span data-i18n="providerLabel"></span>
+        <select id="imageProvider">
+          <option value="mock" data-i18n="providerMock"></option>
+          <option value="stability">Stability AI</option>
+          <option value="replicate">Replicate</option>
+          <option value="localsd" data-i18n="providerLocalSd"></option>
+        </select>
+      </label>
+      <label class="key-field"><span data-i18n="keyStabilityLabel"></span> <input id="key-stability" type="password" placeholder="sk-..."></label>
+      <label class="key-field"><span data-i18n="keyReplicateLabel"></span> <input id="key-replicate" type="password" placeholder="r8_..."></label>
+      <label class="key-field"><span data-i18n="localImageBaseUrlLabel"></span> <span class="hint-inline" data-i18n="localImageBaseUrlHint"></span><input id="localImageBaseUrl" type="text" placeholder="http://localhost:7860"></label>
+      <label class="key-field"><span data-i18n="keyLocalSdLabel"></span> <span class="hint-inline" data-i18n="keyLocalSdHint"></span><input id="key-localsd" type="password" placeholder="(optionnel)"></label>
+      <label><span data-i18n="imageModelPresetLabel"></span> <span class="hint-inline" data-i18n="imageModelPresetHint"></span>
+        <select id="imageModelPreset">
+          <option value="" data-i18n="modelPresetCustom"></option>
+        </select>
+        <button type="button" id="localsdRefreshBtn" class="text-btn small-btn" data-i18n="localsdRefreshBtn"></button>
+      </label>
+      <label><span data-i18n="imageModelLabel"></span> <span class="hint-inline" data-i18n="imageModelHint"></span>
+        <input id="imageModel" type="text" placeholder="ex : realvisxlV50_v50LightningBakedvae.safetensors">
+      </label>
+    </div>
+
+    <button id="saveSettingsBtn" class="primary-btn" data-i18n="saveBtn"></button>
+    <p id="settingsStatus" class="hint"></p>
+
+    <div class="settings-group">
+      <h3 data-i18n="costsHeading"></h3>
+      <p class="hint" data-i18n="costsHint"></p>
+      <div id="costSummary" class="cost-summary"></div>
+    </div>
+  </section>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

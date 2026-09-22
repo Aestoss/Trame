@@ -1,0 +1,21 @@
+{
+  "name": "trame",
+  "version": "0.1.0",
+  "description": "AI choose-your-own-adventure app with a retrieval-based, multi-agent narrative memory (Writer/Retriever/Archivist/Proofreader/Mastermind)",
+  "main": "server.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "better-sqlite3": "^13.0.3",
+    "node-fetch": "^2.7.0",
+    "form-data": "^4.0.0",
+    "uuid": "^9.0.1",
+    "cors": "^2.8.5"
+  }
+}
