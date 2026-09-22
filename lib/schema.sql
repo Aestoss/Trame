@@ -76,6 +76,15 @@ CREATE TABLE IF NOT EXISTS memoryFacts (
 );
 CREATE INDEX IF NOT EXISTS idx_memoryFacts_saveId ON memoryFacts(saveId);
 
+-- The Retriever's index (Milestone 2 of the V2 design doc): one row per
+-- memoryFacts row that has an embedding, same rowid on both sides (see
+-- lib/db.js's syncVecInsert/syncVecDelete -- kept in lockstep there, not
+-- here, since this table has no id/foreign-key column of its own to join
+-- on otherwise). Dimension must match lib/embeddingConfig.js's
+-- EMBEDDING_DIMS; sqlite-vec's vec0 module (loaded in lib/db.js before this
+-- file runs) is what provides the CREATE VIRTUAL TABLE syntax below.
+CREATE VIRTUAL TABLE IF NOT EXISTS memoryFacts_vec USING vec0(embedding float[768]);
+
 CREATE TABLE IF NOT EXISTS costLog (
   id TEXT PRIMARY KEY,
   worldId TEXT,

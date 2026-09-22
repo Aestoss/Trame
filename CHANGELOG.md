@@ -1,5 +1,53 @@
 # Changelog
 
+## 2026-09-22 — Milestone 2 : le Retriever, mémoire par similarité plutôt que par récence
+
+Livrable central du doc de conception : remplacer le plafond par récence
+(Milestone 1) par une vraie recherche par similarité sur l'archive de
+faits — voir la section « Retrieval mechanism ».
+
+- **`providers/embeddingProviders.js`** (nouveau) : fournisseur `mock`
+  (technique du hashing — FNV-1a dans un vecteur à largeur fixe,
+  normalisé L2 — un vrai signal de similarité lexicale, pas un
+  placeholder, et surtout utilisable sans aucune clé API, comme tous les
+  autres fournisseurs `mock` de l'app) et fournisseur `gemini`
+  (`text-embedding-004`, réutilise `apiKeys.gemini` existant). Nouveau
+  réglage `settings.embeddingProvider` (défaut `mock`), même schéma que
+  `textProvider`/`imageProvider`.
+- **`sqlite-vec`** intégré à `lib/db.js` : table virtuelle
+  `memoryFacts_vec` (768 dimensions, `lib/embeddingConfig.js` fait
+  autorité), synchronisée par rowid avec `memoryFacts` à chaque
+  insertion/suppression (`syncVecInsert`/`syncVecDelete`) — gameEngine.js
+  et les rôles n'y touchent jamais directement, seulement via
+  `db.get('memoryFacts')` comme n'importe quelle autre collection.
+  `db.searchMemoryFactsByEmbedding()` fait la recherche KNN scopée par
+  save + personnage (candidats indexés par `saveId`, filtrés en JS sur
+  `status`/`character`/`type`, puis `rowid IN (...)` sur la table
+  vectorielle — sqlite-vec 0.1.9 n'accepte pas de paramètre lié pour le
+  rowid d'une table vec0 en écriture, d'où l'inlining documenté dans
+  `lib/db.js`).
+- **`roles/retriever.js`** implémenté : étant donné l'action du joueur +
+  une fenêtre de scènes récentes, embed la requête et récupère le top-K
+  par similarité, pour le pool général ET pour chaque personnage — les
+  deux remplacent le plafond par récence du Milestone 1.
+  `gatherTurnContext` (gameEngine.js) devient asynchrone en conséquence.
+  WORLD LORE (faits biographiques sans personnage) reste statique et
+  intégral, inchangé.
+- Chaque fait créé (`roles/archivist.js`, et `maybeSummarize` pour le
+  résumé périodique + ses faits manqués) est maintenant embeddé au moment
+  de sa création via `lib/embedFact.js` — sinon un fait créé par le résumé
+  périodique serait invisible au Retriever.
+
+Vérifié avec un test synthétique de 105 faits sur 5 sujets distincts,
+étalés sur les tours 1 à 105 : interroger sur « le joueur ramasse la
+lanterne » fait remonter le fait le plus ancien de toute l'archive (tour 1)
+en 4ᵉ position, alors qu'aucun des 55 faits les plus récents (tours
+51-105, du remplissage hors-sujet) n'apparaît dans le top 8 — la preuve que
+c'est bien la pertinence qui pilote la sélection, pas la récence. Même
+constat sur une deuxième requête sans rapport (enquête de Detective Voss).
+Régression complète revérifiée (playthrough, regenerate, rewind,
+suppression en cascade y compris `memoryFacts_vec`) sans erreur.
+
 ## 2026-09-22 — Milestone 1 : l'Archivist devient asynchrone, plafond par personnage, horloge narrative
 
 Premier jalon qui ajoute vraiment quelque chose (pas seulement un portage) —

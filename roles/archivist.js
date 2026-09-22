@@ -17,6 +17,7 @@ const { generateText } = require('../providers/textProviders');
 const { recordCost } = require('../lib/costTracker');
 const { buildArchivistPrompt } = require('../lib/promptBuilder');
 const { normalizeNewFact, newMemoryFact } = require('../lib/memoryFacts');
+const { embedFact } = require('../lib/embedFact');
 
 // Model choice: reuses the same textProvider/textModel the Writer is
 // configured with. The design doc suggests a cheap, fast default
@@ -55,11 +56,13 @@ async function extractFacts({ worldId, saveId, turnNumber, playerAction, chapter
     return;
   }
 
-  (parsed.new_facts || []).forEach(rawFact => {
+  for (const rawFact of parsed.new_facts || []) {
     const { fact, character, type } = normalizeNewFact(rawFact);
-    if (!fact) return;
-    db.get('memoryFacts').push(newMemoryFact({ saveId, turnNumber, fact, character, type })).write();
-  });
+    if (!fact) continue;
+    const row = newMemoryFact({ saveId, turnNumber, fact, character, type });
+    row.embedding = await embedFact(fact, settings, `save ${saveId}, turn ${turnNumber}`);
+    db.get('memoryFacts').push(row).write();
+  }
 }
 
 module.exports = { extractFacts };

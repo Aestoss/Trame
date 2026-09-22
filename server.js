@@ -592,7 +592,8 @@ app.post('/api/settings', (req, res) => {
   const current = db.get('settings').value();
   const {
     textProvider, textModel, ollamaBaseUrl, fallbackProvider, fallbackModel,
-    language, chapterLength, imageProvider, imageModel, imagesEnabled, localImageBaseUrl, apiKeys
+    language, chapterLength, imageProvider, imageModel, imagesEnabled, localImageBaseUrl,
+    embeddingProvider, apiKeys
   } = req.body;
   const next = {
     textProvider: textProvider ?? current.textProvider,
@@ -611,6 +612,9 @@ app.post('/api/settings', (req, res) => {
     imageModel: imageModel !== undefined ? (imageModel || null) : current.imageModel,
     imagesEnabled: typeof imagesEnabled === 'boolean' ? imagesEnabled : current.imagesEnabled,
     localImageBaseUrl: localImageBaseUrl ?? current.localImageBaseUrl,
+    // See providers/embeddingProviders.js (the Retriever role, Milestone 2)
+    // -- 'gemini' reuses apiKeys.gemini below, no separate key needed.
+    embeddingProvider: embeddingProvider ?? current.embeddingProvider,
     apiKeys: { ...current.apiKeys, ...(apiKeys || {}) }
   };
   db.set('settings', next).write();

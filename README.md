@@ -10,11 +10,13 @@ plutôt que par troncature, plan de migration en 5 étapes). Inspirée
 également d'[Infinite Worlds](https://infiniteworlds.app) (voir
 `docs/INFINITE_WORLDS_REFERENCE.md`).
 
-**Statut actuel : Milestone 1.** L'Archivist tourne (extraction de faits
-asynchrone, hors du chemin critique du joueur), les faits par personnage
-sont plafonnés, et l'horloge narrative (`storyClock`) est alimentée à chaque
-tour. Retriever, Proofreader et Mastermind restent à implémenter (voir
-`roles/`, chacun documente son propre jalon). Pas encore déployé.
+**Statut actuel : Milestone 2.** Le Retriever tourne : les faits pertinents
+pour un tour (pool général + faits par personnage) sont sélectionnés par
+similarité (embeddings + sqlite-vec) plutôt que par un plafond de récence.
+L'Archivist tourne en tâche de fond (hors du chemin critique du joueur), et
+l'horloge narrative (`storyClock`) est alimentée à chaque tour. Proofreader
+et Mastermind restent à implémenter (voir `roles/`, chacun documente son
+propre jalon). Pas encore déployé.
 
 ## Fonctionnalités
 
@@ -42,10 +44,10 @@ tour. Retriever, Proofreader et Mastermind restent à implémenter (voir
 - **Objets/état suivis** typés (inventaire, jauges de relation...),
   visibles par le joueur ou réservés à l'IA.
 - **Mémoire structurée** : faits extraits par l'Archivist (async, hors du
-  chemin critique du joueur) + résumé automatique des tours anciens, avec un
-  plafond par personnage en plus du pool général. La bascule vers une vraie
-  récupération par similarité (au lieu d'un plafond par récence) arrive au
-  Milestone 2 — voir le doc de conception.
+  chemin critique du joueur) + résumé automatique des tours anciens. Les
+  faits pertinents pour un tour (pool général et par personnage) sont
+  sélectionnés par similarité (embeddings + sqlite-vec, voir
+  `roles/retriever.js`) plutôt que par un plafond de récence.
 - **Interface traduite** (français/anglais) suivant le réglage de langue,
   installable comme PWA sur téléphone.
 - **Suivi des coûts** IA (jetons + estimation $) et fournisseurs
@@ -84,11 +86,14 @@ lib/backup.js                 → sauvegardes glissantes de trame.db
 lib/promptBuilder.js         → assemblage des prompts en couches envoyés à l'IA
 lib/gameEngine.js            → logique de jeu : mondes, sauvegardes, tours, mémoire
 lib/memoryFacts.js            → forme partagée des faits mémoire (gameEngine.js + roles/archivist.js)
+lib/embedFact.js               → embed un fait à sa création (roles/archivist.js + maybeSummarize)
+lib/embeddingConfig.js         → dimension des vecteurs d'embedding, source unique (db.js + embeddingProviders.js)
 lib/pricing.js               → tarifs approximatifs $/1M tokens par fournisseur
 lib/costTracker.js           → enregistrement et agrégation des coûts d'appels IA
 providers/textProviders.js   → Anthropic / OpenAI / OpenRouter / Gemini / Ollama / démo
 providers/imageProviders.js  → Stability / Replicate / Stable Diffusion local / démo
-roles/                        → Writer + Archivist (actifs) ; Retriever/Proofreader/Mastermind
+providers/embeddingProviders.js → mock (hashing local, sans clé) / Gemini (text-embedding-004)
+roles/                        → Writer, Archivist, Retriever (actifs) ; Proofreader/Mastermind
                                  sont des stubs qui documentent leur propre jalon de migration
 public/                      → interface (HTML/CSS/JS), installable en PWA
 scripts/windows/              → pont PC local (Ollama/Forge/Chroma, tunnel Tailscale)
@@ -100,7 +105,10 @@ Pas de framework frontend (JS vanilla). Base de données SQLite via
 [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) — un seul
 fichier, pas de service externe à gérer, mêmes garanties d'atomicité que ce
 que Fogbound a dû ajouter à la main après un incident de corruption réel
-(voir l'en-tête de `lib/db.js` pour le détail).
+(voir l'en-tête de `lib/db.js` pour le détail). La recherche par similarité
+du Retriever passe par [sqlite-vec](https://github.com/asg017/sqlite-vec),
+une extension SQLite — toujours un seul fichier, aucune base vectorielle
+séparée à faire tourner.
 
 ## Déploiement
 

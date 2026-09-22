@@ -11,11 +11,12 @@
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.19.2",
     "better-sqlite3": "^13.0.3",
-    "node-fetch": "^2.7.0",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
     "form-data": "^4.0.0",
-    "uuid": "^9.0.1",
-    "cors": "^2.8.5"
+    "node-fetch": "^2.7.0",
+    "sqlite-vec": "^0.1.9",
+    "uuid": "^9.0.1"
   }
 }
