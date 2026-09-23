@@ -22,6 +22,7 @@ const { v4: uuid } = require('uuid');
 const { generateText } = require('../providers/textProviders');
 const { recordCost } = require('../lib/costTracker');
 const { buildProofreaderPrompt } = require('../lib/promptBuilder');
+const { getBackgroundModelConfig } = require('../lib/backgroundModel');
 
 // storyClock: the value as of right after this chapter (see
 // gameEngine.js's fireProofreader -- it reads the just-persisted value,
@@ -29,15 +30,16 @@ const { buildProofreaderPrompt } = require('../lib/promptBuilder');
 // update that happened THIS turn is exactly what a contradiction would be
 // checked against). relevantFacts: plain fact strings, similarity-retrieved
 // against the chapter text itself (see gameEngine.js's fireProofreader).
+// Model choice: see lib/backgroundModel.js -- same fixed, cheap model as
+// the Archivist once a background key is set.
 async function checkChapter({ worldId, saveId, turnNumber, chapterText, storyClock, relevantFacts, settings }) {
-  const provider = settings.textProvider;
-  const model = settings.textModel;
+  const { provider, model, apiKey, baseUrl } = getBackgroundModelConfig(settings);
   const { system, user } = buildProofreaderPrompt({ chapterText, storyClock, relevantFacts, language: settings.language });
 
   let raw;
   try {
     const result = await generateText({
-      provider, system, user, apiKey: settings.apiKeys[provider], model, baseUrl: settings.ollamaBaseUrl
+      provider, system, user, apiKey, model, baseUrl
     });
     raw = result.text;
     recordCost({ worldId, saveId, kind: 'proofreader', provider, model, usage: result.usage });

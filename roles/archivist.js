@@ -18,28 +18,24 @@ const { recordCost } = require('../lib/costTracker');
 const { buildArchivistPrompt } = require('../lib/promptBuilder');
 const { normalizeNewFact, newMemoryFact } = require('../lib/memoryFacts');
 const { embedFact } = require('../lib/embedFact');
+const { getBackgroundModelConfig } = require('../lib/backgroundModel');
 
-// Model choice: reuses the same textProvider/textModel the Writer is
-// configured with. The design doc suggests a cheap, fast default
-// (gemini-3.5-flash-lite) for exactly this kind of narrow, structured task,
-// as a Settings-level per-role choice -- not implemented yet (no Milestone 1
-// deliverable asks for it), so for now the Archivist just piggybacks on
-// whatever provider is already configured, same as every other call before
-// this role existed.
+// Model choice: see lib/backgroundModel.js -- a fixed, cheap model
+// (gemini-3.5-flash-lite) once settings.backgroundModel.apiKey is set,
+// falling back to whatever the Writer is configured with otherwise.
 // povCharacter: set when the chapter being extracted from was a POV scene
 // (see buildPovPrompt/playPovTurnStreaming) -- the MC was explicitly not
 // present, so buildArchivistPrompt needs to scope known_by to whoever
 // actually was, instead of defaulting new facts to "publicly known" the
 // way a normal MC-POV chapter's facts do.
 async function extractFacts({ worldId, saveId, turnNumber, playerAction, chapterText, characterNames, povCharacter, settings }) {
-  const provider = settings.textProvider;
-  const model = settings.textModel;
+  const { provider, model, apiKey, baseUrl } = getBackgroundModelConfig(settings);
   const { system, user } = buildArchivistPrompt({ characterNames, playerAction, chapterText, povCharacter, language: settings.language });
 
   let raw;
   try {
     const result = await generateText({
-      provider, system, user, apiKey: settings.apiKeys[provider], model, baseUrl: settings.ollamaBaseUrl
+      provider, system, user, apiKey, model, baseUrl
     });
     raw = result.text;
     recordCost({ worldId, saveId, kind: 'archivist', provider, model, usage: result.usage });

@@ -25,20 +25,22 @@ const { v4: uuid } = require('uuid');
 const { generateText } = require('../providers/textProviders');
 const { recordCost } = require('../lib/costTracker');
 const { buildMastermindPrompt } = require('../lib/promptBuilder');
+const { getBackgroundModelConfig } = require('../lib/backgroundModel');
 
 // previousPlan: the current active mastermindPlans row, or null on the
 // first call for a save. Fired without being awaited (see
 // gameEngine.js's fireMastermind) -- never on the critical path, same as
-// the Archivist and Proofreader.
+// the Archivist and Proofreader. Model choice: see lib/backgroundModel.js
+// -- same fixed, cheap model as the other two background roles once a
+// background key is set.
 async function reviewPlan({ worldId, saveId, turnNumber, world, previousPlan, recentTurns, storyClock, settings }) {
-  const provider = settings.textProvider;
-  const model = settings.textModel;
+  const { provider, model, apiKey, baseUrl } = getBackgroundModelConfig(settings);
   const { system, user } = buildMastermindPrompt({ world, previousPlan, recentTurns, storyClock, language: settings.language });
 
   let raw;
   try {
     const result = await generateText({
-      provider, system, user, apiKey: settings.apiKeys[provider], model, baseUrl: settings.ollamaBaseUrl
+      provider, system, user, apiKey, model, baseUrl
     });
     raw = result.text;
     recordCost({ worldId, saveId, kind: 'mastermind', provider, model, usage: result.usage });
