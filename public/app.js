@@ -211,6 +211,9 @@ const UI = {
     fallbackProviderLabel: 'Fournisseur de secours', fallbackProviderHint: '(utilisé ponctuellement si Ollama est hors ligne ou indisponible)',
     fallbackProviderNone: '(aucun)',
     fallbackModelLabel: 'Modèle de secours',
+    settingsBackgroundHeading: 'Modèle léger (tâches de fond)',
+    settingsBackgroundHint: "Utilisé par l'Archivist, le Proofreader et le Mastermind (extraction de faits, vérifications, plan caché) — jamais vu par le joueur. Modèle fixé à Gemini 3.5 Flash Lite, non modifiable ici ; sans clé, ces tâches utilisent le fournisseur principal ci-dessus.",
+    keyBackgroundLabel: 'Clé API Gemini (modèle léger)', keyBackgroundHint: '(optionnelle — voir ci-dessus)',
     fallbackConfirmOfflineMsg: 'Ollama semble hors ligne (PC éteint ou pont non démarré).',
     fallbackConfirmBusyMsg: 'Le GPU de votre PC est très sollicité — la génération via Ollama risque d\'être lente.',
     fallbackConfirmUseBtn: 'Utiliser {provider} pour ce tour',
@@ -426,6 +429,9 @@ const UI = {
     fallbackProviderLabel: 'Fallback provider', fallbackProviderHint: '(used one-off if Ollama is offline or unavailable)',
     fallbackProviderNone: '(none)',
     fallbackModelLabel: 'Fallback model',
+    settingsBackgroundHeading: 'Lightweight model (background tasks)',
+    settingsBackgroundHint: 'Used by the Archivist, Proofreader and Mastermind (fact extraction, consistency checks, hidden plan) — never seen by the player. Model fixed to Gemini 3.5 Flash Lite, not selectable here; without a key, these tasks use the main provider above instead.',
+    keyBackgroundLabel: 'Gemini API key (lightweight model)', keyBackgroundHint: '(optional — see above)',
     fallbackConfirmOfflineMsg: 'Ollama appears to be offline (PC off, or the bridge isn\'t running).',
     fallbackConfirmBusyMsg: 'Your PC\'s GPU is under heavy load — generating via Ollama may be slow.',
     fallbackConfirmUseBtn: 'Use {provider} for this turn',
@@ -2535,6 +2541,8 @@ async function loadSettings() {
     const field = document.getElementById(`key-${p}`);
     field.placeholder = s.apiKeys[p] ? t('keyAlreadySaved') : field.placeholder;
   });
+  const bgField = document.getElementById('key-backgroundModel');
+  bgField.placeholder = (s.backgroundModel && s.backgroundModel.apiKey) ? t('keyAlreadySaved') : 'AIza...';
 }
 
 document.getElementById('saveSettingsBtn').onclick = async () => {
@@ -2543,6 +2551,9 @@ document.getElementById('saveSettingsBtn').onclick = async () => {
     const val = document.getElementById(`key-${p}`).value.trim();
     if (val) apiKeys[p] = val; // only overwrite if the user typed something new
   });
+  const backgroundModel = {};
+  const bgVal = document.getElementById('key-backgroundModel').value.trim();
+  if (bgVal) backgroundModel.apiKey = bgVal;
   const body = {
     textProvider: document.getElementById('textProvider').value,
     textModel: document.getElementById('textModel').value.trim(),
@@ -2555,7 +2566,8 @@ document.getElementById('saveSettingsBtn').onclick = async () => {
     imageModel: document.getElementById('imageModel').value.trim(),
     imagesEnabled: document.getElementById('imagesEnabled').checked,
     localImageBaseUrl: document.getElementById('localImageBaseUrl').value.trim(),
-    apiKeys
+    apiKeys,
+    backgroundModel
   };
   await fetch(`${API}/settings`, {
     method: 'POST',
@@ -2573,6 +2585,7 @@ document.getElementById('saveSettingsBtn').onclick = async () => {
   ['anthropic', 'openai', 'openrouter', 'gemini', 'ollama', 'stability', 'replicate', 'localsd'].forEach(p => {
     document.getElementById(`key-${p}`).value = '';
   });
+  document.getElementById('key-backgroundModel').value = '';
   await loadSettings();
   pollOllamaStatus(); // ollamaBaseUrl may have just changed
   setTimeout(() => { document.getElementById('settingsStatus').textContent = ''; }, 2000);
