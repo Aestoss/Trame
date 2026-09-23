@@ -301,6 +301,20 @@ input[type="range"] { width: 100%; margin: 6px 0 4px; accent-color: var(--accent
 }
 .secret-info-box.hidden { display: none; }
 
+/* Author-mode-only Proofreader warning (see roles/proofreader.js,
+   Milestone 3) -- same box shape as secret-info-box, but a warning color
+   since a flag here means "check this", not neutral hidden-state info. */
+.proofreader-flag-box {
+  background: rgba(201, 92, 44, 0.12);
+  border: 1px dashed #c95c2c;
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  margin-bottom: 16px;
+}
+.proofreader-flag-box.hidden { display: none; }
+
 .past-page-actions { text-align: center; margin-bottom: 20px; }
 .past-page-actions.hidden { display: none; }
 .past-page-actions .primary-btn { width: 100%; }

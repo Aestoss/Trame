@@ -535,6 +535,8 @@ async function callMock({ system, user }) {
   const isNarration = !isTimeSkip && !isPov && /===CHAPTER===/.test(system || '');
   const isState = /You maintain the hidden bookkeeping/.test(system || '');
   const isArchivist = /You extract structured facts from a single chapter/.test(system || '');
+  const isProofreader = /narrow continuity checker/.test(system || '');
+  const isMastermind = /hidden Mastermind behind/.test(system || '');
 
   if (isPov) {
     const povCharacterName = povMatch[1];
@@ -571,6 +573,15 @@ async function callMock({ system, user }) {
     if (/\btake the lantern\b/i.test(action)) {
       return { usage: noUsage, text: '===CHAPTER===\nYou lift the lantern from its hook. Keeper Oduya says nothing, but her eyes follow it.\n===META===\n' + JSON.stringify({ outcome: 'success', skill_used: null, game_over: null, suggested_actions: ['Ask why she\'s watching you', 'Light the lantern', 'Put it back'] }) };
     }
+    // Deliberately produces the exact failure mode the Proofreader
+    // (Milestone 3) exists to catch -- a chapter that claims a long stretch
+    // just passed (see isState below, which sets story_clock accordingly on
+    // this same marker) while its own wording still treats the moment as
+    // immediate. Lets the mock provider exercise the flagged path, not just
+    // the (overwhelmingly more common) null one.
+    if (/\bpacing test\b/i.test(action)) {
+      return { usage: noUsage, text: '===CHAPTER===\nSeveral weeks slid past in a haze of fog and routine. And yet it had only been this morning that you last stood on these steps, or so it felt.\n===META===\n' + JSON.stringify({ outcome: 'n/a', skill_used: null, game_over: null, suggested_actions: [] }) };
+    }
     return {
       usage: noUsage,
       text: '===CHAPTER===\nYou step forward, and the fog seems to lean in around you, as if listening. Somewhere above, the lighthouse lens turns without a keeper\'s hand.\n===META===\n' +
@@ -584,6 +595,12 @@ async function callMock({ system, user }) {
     // above) so the mock provider exercises time_skip end to end too,
     // instead of it only ever coming back null in local testing.
     const wasTimeSkip = /days blurred together/i.test(user);
+    // See isNarration's own "pacing test" marker above -- this is what
+    // simulates the Writer autonomously deciding on a time skip (a real
+    // model could, via the PACING & TIME SKIPS section of its own prompt)
+    // in the same turn whose chapter text the mock deliberately keeps
+    // narrating as if no time had passed, for the Proofreader to catch.
+    const pacingTest = /pacing test/i.test(user);
     return {
       usage: noUsage,
       text: JSON.stringify({
@@ -599,9 +616,66 @@ async function callMock({ system, user }) {
         // upserts storyClock, the same reasoning as new_facts below.
         story_clock: wasTimeSkip
           ? { current_date: null, elapsed_description: 'several days' }
+          : pacingTest ? { current_date: null, elapsed_description: 'several weeks' }
           : tookLantern ? { current_date: null, elapsed_description: 'a moment later' } : { current_date: null, elapsed_description: null },
         time_skip: wasTimeSkip ? { elapsed_description: 'several days', summary: 'Several uneventful days passed while things quietly moved into place.' } : null,
         image_prompt: 'A foggy lighthouse at dusk, glass architecture, a lone figure on stone steps'
+      })
+    };
+  }
+
+  if (isProofreader) {
+    // Real logic, not a fixed canned response -- the mock actually checks
+    // the chapter text against the story clock line it was given, the same
+    // shape of check the real prompt (buildProofreaderPrompt) asks a real
+    // model to do. Deterministic and good enough for a mock: a "long"
+    // elapsed duration alongside an immediate-time phrase in the chapter is
+    // exactly the contradiction this narrow first pass exists to catch.
+    const elapsedMatch = user.match(/Time that has just passed: (.+?)\./);
+    const elapsed = (elapsedMatch && elapsedMatch[1]) || '';
+    const isLongElapsed = /\b(week|weeks|month|months|year|years)\b/i.test(elapsed);
+    const immediateMatch = user.match(/\b(this morning|just now|moments ago|right now)\b/i);
+    if (isLongElapsed && immediateMatch) {
+      return {
+        usage: noUsage,
+        text: JSON.stringify({
+          contradiction: {
+            summary: `Le chapitre affirme que « ${elapsed} » vient de passer, mais parle aussi de « ${immediateMatch[1]} » comme si c'était immédiat.`,
+            quote: immediateMatch[1]
+          }
+        })
+      };
+    }
+    return { usage: noUsage, text: JSON.stringify({ contradiction: null }) };
+  }
+
+  if (isMastermind) {
+    // Distinguishes the first call for a save (no previous plan yet -- see
+    // buildMastermindPrompt's own "none yet" placeholder) from a later
+    // revision, so the mock exercises both the initial-plan path and the
+    // versioned supersede path (see roles/mastermind.js), not just one of
+    // them forever in local testing.
+    const isFirstPlan = /PREVIOUS PLAN\n\(none yet/.test(user);
+    const titleMatch = user.match(/Title: (.+)/);
+    const title = (titleMatch && titleMatch[1]) || 'this story';
+    return {
+      usage: noUsage,
+      text: JSON.stringify({
+        plan: isFirstPlan
+          ? {
+              summary: `Something in ${title} is quietly building toward a choice the player character doesn't yet know they'll have to make.`,
+              beats: [
+                'Keeper Oduya is hiding how little fuel is actually left.',
+                'A second lighthouse keeper, long thought gone, is still out there.'
+              ]
+            }
+          : {
+              summary: `The lantern is becoming the story's real fault line, not just a prop -- ${title} is narrowing toward who gets to decide what it's for.`,
+              beats: [
+                'Keeper Oduya is hiding how little fuel is actually left.',
+                'The fog itself starts behaving like it notices who is carrying the lantern.'
+              ]
+            }
       })
     };
   }

@@ -68,6 +68,7 @@ const UI = {
     povEcho: (name, hint) => hint ? `🎭 Du point de vue de ${name} : ${hint}` : `🎭 Du point de vue de ${name}`,
     povBadge: name => `🎭 Du point de vue de ${name}`,
     povNoCharacters: "Aucun personnage rencontré n'est disponible pour l'instant.",
+    proofreaderFlagPrefix: 'Incohérence possible de rythme temporel :',
     cancelBtn: 'Annuler',
     saveBtn: 'Enregistrer',
     sendBtn: 'Envoyer',
@@ -281,6 +282,7 @@ const UI = {
     povEcho: (name, hint) => hint ? `🎭 Through ${name}'s eyes: ${hint}` : `🎭 Through ${name}'s eyes`,
     povBadge: name => `🎭 Through ${name}'s eyes`,
     povNoCharacters: 'No characters you\'ve met are available yet.',
+    proofreaderFlagPrefix: 'Possible pacing contradiction:',
     cancelBtn: 'Cancel',
     saveBtn: 'Save',
     sendBtn: 'Send',
@@ -472,6 +474,7 @@ let currentTurns = [];      // all turns of the open save, oldest first — one 
 let currentPageIndex = 0;   // which turn is currently displayed
 let currentTimelineEvents = []; // past time skips (see gameEngine.js's timelineEvents), keyed by turnNumber for the badge in renderPage
 let currentSaveCharacters = []; // characters met so far in this save (see server.js's saveCharacters), for the POV picker
+let currentProofreaderFlags = []; // author-mode-only pacing contradictions (see roles/proofreader.js), keyed by turnNumber -- empty outside debug mode, server never sends them otherwise
 let debugModeOn = false;    // "mode auteur": reveals hidden info (secret info box, outcome badges) -- talking
                              // to the narrator is a separate, always-visible field (#instructionInput below)
 let previousView = 'home';
@@ -1543,6 +1546,7 @@ function applySaveData(data, jumpToLatest) {
   currentTurns = data.turns;
   currentTimelineEvents = data.timelineEvents || [];
   currentSaveCharacters = data.saveCharacters || [];
+  currentProofreaderFlags = data.proofreaderFlags || [];
 
   showView('story');
   document.getElementById('storyTitle').textContent = data.world.title;
@@ -1679,6 +1683,19 @@ function renderPage() {
     secretBox.classList.remove('hidden');
   } else {
     secretBox.classList.add('hidden');
+  }
+
+  // Proofreader flags (see roles/proofreader.js, Milestone 3): server only
+  // ever sends currentProofreaderFlags when debug=1 was requested (see
+  // fetchSaveData), so debugModeOn here is really just deciding whether to
+  // show what's already author-only data, same gating as secretBox above.
+  const proofreaderFlagBox = document.getElementById('proofreaderFlagBox');
+  const proofreaderFlag = debugModeOn ? currentProofreaderFlags.find(f => f.turnNumber === turn.turnNumber) : null;
+  if (proofreaderFlag) {
+    proofreaderFlagBox.textContent = `⚠️ ${t('proofreaderFlagPrefix')} ${proofreaderFlag.summary}`;
+    proofreaderFlagBox.classList.remove('hidden');
+  } else {
+    proofreaderFlagBox.classList.add('hidden');
   }
 
   renderTrackedItems(turn.trackedItems || []);

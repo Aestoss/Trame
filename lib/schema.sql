@@ -139,3 +139,16 @@ CREATE TABLE IF NOT EXISTS mastermindPlans (
   data TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_mastermindPlans_saveId ON mastermindPlans(saveId);
+
+-- Milestone 3's Proofreader, narrow first pass (see roles/proofreader.js):
+-- one row per turn where a pacing-language contradiction against
+-- storyClock was actually found -- most turns produce none, so this is
+-- sparse, not one row per turn like memoryFacts/turns. Author-mode-only
+-- surfacing (never shown to the player), same treatment as secretInfo.
+CREATE TABLE IF NOT EXISTS proofreaderFlags (
+  id TEXT PRIMARY KEY,
+  saveId TEXT NOT NULL,
+  turnNumber INTEGER NOT NULL,
+  data TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_proofreaderFlags_saveId ON proofreaderFlags(saveId);

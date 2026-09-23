@@ -416,12 +416,20 @@ app.get('/api/saves/:id', (req, res) => {
     // the POV mechanic) to list who the player can switch perspective to.
     const saveCharacters = db.get('saveCharacters').filter({ saveId: save.id }).value()
       .map(c => ({ id: c.id, name: c.name, role: c.role, oneLiner: c.oneLiner }));
+    // The Proofreader's pacing-contradiction flags (see roles/proofreader.js,
+    // Milestone 3): author-mode-only, same treatment as secretInfo above --
+    // never sent to a non-debug request, since these are meant for the
+    // author to judge, not something the player should see mid-story.
+    const proofreaderFlags = debug
+      ? db.get('proofreaderFlags').filter({ saveId: save.id }).sortBy('turnNumber').value()
+      : [];
     res.json({
       save: debug ? save : publicSave(save),
       world,
       turns,
       timelineEvents,
       saveCharacters,
+      proofreaderFlags,
       playableCharacters: worldPlayableCharacters(world.id)
     });
   } catch (e) {

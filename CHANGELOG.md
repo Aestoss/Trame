@@ -1,5 +1,79 @@
 # Changelog
 
+## 2026-09-23 — Milestone 3 : le Proofreader et le Mastermind
+
+Les deux rôles restants du plan de migration (voir le doc de conception
+« Fogbound V2 Architecture »). Aucun des deux n'écrit jamais ce que le
+joueur voit — ils tournent en tâche de fond, hors du chemin critique,
+exactement comme l'Archivist depuis le Milestone 1.
+
+**Le Proofreader** (`roles/proofreader.js`) : première passe volontairement
+étroite, comme annoncé dans son commentaire d'origine — uniquement le
+langage de rythme temporel contre `storyClock`, le scénario précis qui a
+motivé le doc (un mois qui vient de passer, mais le chapitre parle encore
+de « ce matin »). Pas de vérification de contradiction complète sur
+l'ensemble de l'archive de faits — ça, c'est le Milestone 4.
+
+- Nouvelle table `proofreaderFlags` (une ligne par tour où une
+  contradiction a réellement été détectée — la grande majorité des tours
+  n'en produisent aucune, contrairement à `memoryFacts`/`turns`).
+- Nouveau prompt dédié (`buildProofreaderPrompt`) : donne au modèle le
+  chapitre qui vient d'être écrit et le `storyClock` juste après ce même
+  tour, lui demande de ne signaler qu'une contradiction concrète et
+  certaine — une fausse alerte coûte plus cher qu'un oubli, donc consigne
+  explicite de rester silencieux (`{"contradiction": null}`) dans le doute.
+- Déclenché depuis `playTurn`/`playTurnStreaming` uniquement — ni l'ellipse
+  temporelle explicite (le joueur vient justement de demander qu'une longue
+  période passe : ce n'est pas une contradiction), ni une scène POV (elle
+  raconte un autre moment sur sa propre ancre « CURRENT SITUATION », sans
+  faire avancer l'horloge narrative principale).
+- Surfaçage strictement réservé au mode auteur (🔍) — jamais renvoyé par
+  `GET /api/saves/:id` en dehors de `debug=1`, même traitement que
+  `secretInfo`. Petit encart d'avertissement sur la page concernée
+  (`.proofreader-flag-box`), jamais visible du joueur.
+
+**Le Mastermind** (`roles/mastermind.js`) : maintient un plan narratif
+caché — quelques futurs développements/événements de fond — que le Writer
+peut mobiliser sans y être obligé. Contrairement au Proofreader (déclenché
+à chaque tour normal), tourne sur un rythme périodique
+(`MASTERMIND_EVERY = 5` tours, ancré sur `turnNumber % 5 === 1` pour amorcer
+un premier plan dès le deuxième tour réel plutôt que de laisser la
+sauvegarde sans plan jusqu'au tour 5).
+
+- Table `mastermindPlans` (déjà présente dans le schéma depuis le
+  Milestone 0, inutilisée jusqu'ici) : versionnée comme `memoryFacts`
+  (`status: active|superseded`, `supersededBy`) — une ligne active par
+  sauvegarde, l'historique n'est jamais supprimé.
+- Garde-fou du doc, restauré textuellement dans le prompt lui-même
+  (`buildMastermindMasterPrompt`) : le Mastermind propose, il ne réécrit
+  jamais rétroactivement ce qui a déjà été raconté au joueur — tout ce
+  qu'il veut voir établi doit d'abord être réellement écrit dans un
+  chapitre, puis passer par le même pipeline Archivist que n'importe quel
+  autre fait.
+- Le plan actif est relu dans `gatherTurnContext` et injecté comme un
+  nouveau bloc « MASTERMIND'S PLAN » (caché du joueur, même traitement que
+  SECRET INFO) dans `buildNarrationPrompt`/`buildTurnPrompt` — pas dans les
+  prompts d'ellipse temporelle/POV, même raisonnement de portée que le
+  Proofreader ci-dessus.
+- Décision de portée assumée : pas de surfaçage frontend, même en mode
+  auteur — contrairement à `secretInfo` que l'auteur peut voir/éditer
+  directement, le plan du Mastermind reste une donnée purement interne au
+  Writer. Rien dans le doc de conception ne demande une UI dédiée pour ce
+  rôle ; à reconsidérer si ça manque en pratique.
+
+Vérifié de bout en bout (fournisseur mock) : le plan du Mastermind s'amorce
+bien au tour 1, et le bloc MASTERMIND'S PLAN apparaît vérifié dans le
+prompt du tour suivant (confirmé par lecture directe du texte généré, pas
+seulement par la présence de la ligne en base). Un tour délibérément
+contradictoire (« several weeks » dans `storyClock` contre « this morning »
+dans le texte) produit bien une ligne `proofreaderFlags`, invisible sans
+`debug=1` et visible avec. Rewind : une ligne `mastermindPlans` postérieure
+au point de rewind disparaît, une ligne antérieure ou égale survit (testé
+dans les deux cas) ; une ligne `proofreaderFlags` postérieure disparaît de
+la même façon. Suppression en cascade d'un monde/d'une sauvegarde : les
+deux nouvelles tables reviennent à 0 comme le reste. Aucune erreur dans les
+logs sur l'ensemble de la session de test.
+
 ## 2026-09-23 — Mécanique de changement de point de vue (POV)
 
 Ajouté hors plan de migration, à la demande explicite, en réaction directe à
