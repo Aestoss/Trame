@@ -31,20 +31,27 @@ async function embedQuery(text, settings) {
 // scene text (see the design doc's Retrieval mechanism section) --
 // gameEngine.js builds that string, this role only embeds and searches it.
 //
+// viewerCharacter (the POV mechanic's knowledge wall -- see
+// lib/db.js's searchMemoryFactsByEmbedding): whose knowledge this
+// retrieval is scoped to, normally the MC, or the POV character during a
+// POV scene. Applies to every query below regardless of whose facts are
+// being searched -- a fact only reaches the prompt if the *viewer*, not
+// just the fact's own subject, is allowed to know it.
+//
 // Returns { memoryFacts, factsByCharacter } in exactly the shapes
 // lib/promptBuilder.js's buildTurnContextBlocks already expects (mirroring
 // what gatherTurnContext used to build itself via a recency slice):
 // memoryFacts as full fact rows (only .fact is read downstream, but the
 // whole row is kept in case a future milestone wants more of it), and
 // factsByCharacter[name] as plain fact strings.
-async function retrieveRelevantFacts({ saveId, queryText, characterNames, limit, settings }) {
+async function retrieveRelevantFacts({ saveId, queryText, characterNames, viewerCharacter, limit, settings }) {
   const embedding = await embedQuery(queryText, settings);
   if (!embedding) return { memoryFacts: [], factsByCharacter: {} };
 
-  const memoryFacts = db.searchMemoryFactsByEmbedding({ saveId, embedding, k: limit, character: null });
+  const memoryFacts = db.searchMemoryFactsByEmbedding({ saveId, embedding, k: limit, character: null, viewerCharacter });
   const factsByCharacter = {};
   for (const name of characterNames || []) {
-    const rows = db.searchMemoryFactsByEmbedding({ saveId, embedding, k: limit, character: name });
+    const rows = db.searchMemoryFactsByEmbedding({ saveId, embedding, k: limit, character: name, viewerCharacter });
     if (rows.length) factsByCharacter[name] = rows.map(r => r.fact);
   }
   return { memoryFacts, factsByCharacter };

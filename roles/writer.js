@@ -14,6 +14,7 @@ module.exports = {
   playTurn: require('../lib/gameEngine').playTurn,
   playTurnStreaming: require('../lib/gameEngine').playTurnStreaming,
   playTimeSkipStreaming: require('../lib/gameEngine').playTimeSkipStreaming,
+  playPovTurnStreaming: require('../lib/gameEngine').playPovTurnStreaming,
   regenerateTurn: require('../lib/gameEngine').regenerateTurn,
   regenerateTurnStreaming: require('../lib/gameEngine').regenerateTurnStreaming
 };

@@ -94,6 +94,7 @@
       <button id="authorModeBtn" class="icon-btn" data-i18n-title="authorModeBtn">🔍</button>
       <button id="editWorldBtn" class="icon-btn" data-i18n-title="editWorldBtn">✏️</button>
       <button id="timeSkipBtn" class="icon-btn" data-i18n-title="timeSkipBtn">⏩</button>
+      <button id="povBtn" class="icon-btn" data-i18n-title="povBtn">🎭</button>
       <button id="purgeImagesBtn" class="icon-btn" data-i18n-title="purgeImagesBtn">🗑️🖼️</button>
     </div>
     <p id="purgeImagesStatus" class="hint hidden"></p>
@@ -128,6 +129,23 @@
       <div class="regenerate-popover-actions">
         <button id="timeSkipConfirmBtn" class="primary-btn" data-i18n="timeSkipConfirmBtn"></button>
         <button id="timeSkipCancelBtn" class="text-btn" data-i18n="cancelBtn"></button>
+      </div>
+    </div>
+
+    <!-- The POV mechanic: player/author-initiated only (see
+         buildPovPrompt/playPovTurnStreaming) -- no autonomous switch, so
+         this popover is the only way one happens. Same positioning
+         reasoning as the two popovers above. -->
+    <div id="povPopover" class="regenerate-popover hidden">
+      <label><span data-i18n="povCharacterLabel"></span>
+        <select id="povCharacterSelect"></select>
+      </label>
+      <label><span data-i18n="povHintLabel"></span> <span class="hint-inline" data-i18n="povHintHint"></span>
+        <textarea rows="1" id="povHintInput"></textarea>
+      </label>
+      <div class="regenerate-popover-actions">
+        <button id="povConfirmBtn" class="primary-btn" data-i18n="povConfirmBtn"></button>
+        <button id="povCancelBtn" class="text-btn" data-i18n="cancelBtn"></button>
       </div>
     </div>
 

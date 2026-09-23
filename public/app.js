@@ -34,6 +34,7 @@ const UI = {
     authorModeBtn: 'Mode auteur (révéler les informations cachées)',
     editWorldBtn: 'Modifier le monde',
     timeSkipBtn: 'Passer du temps',
+    povBtn: "Voir une scène d'un autre point de vue",
     purgeImagesBtn: 'Purger les images de cette partie',
     purgeImagesConfirm: 'Supprimer toutes les images déjà générées dans cette partie ? Le texte des tours est conservé, seules les images sont effacées.',
     purgeImagesStatus: 'Images supprimées.',
@@ -59,6 +60,14 @@ const UI = {
     timeSkipThinking: 'Le temps passe...',
     timeSkipEcho: hint => hint ? `⏩ Passage du temps : ${hint}` : '⏩ Passage du temps',
     timeSkipBadge: elapsed => `⏩ ${elapsed} passé`,
+    povCharacterLabel: 'À travers les yeux de qui ?',
+    povHintLabel: 'Que doit montrer cette scène ?',
+    povHintHint: '(optionnel — laisse vide pour laisser le narrateur choisir)',
+    povConfirmBtn: '🎭 Voir cette scène',
+    povThinking: 'Le narrateur change de point de vue...',
+    povEcho: (name, hint) => hint ? `🎭 Du point de vue de ${name} : ${hint}` : `🎭 Du point de vue de ${name}`,
+    povBadge: name => `🎭 Du point de vue de ${name}`,
+    povNoCharacters: "Aucun personnage rencontré n'est disponible pour l'instant.",
     cancelBtn: 'Annuler',
     saveBtn: 'Enregistrer',
     sendBtn: 'Envoyer',
@@ -238,6 +247,7 @@ const UI = {
     authorModeBtn: 'Author mode (reveal hidden information)',
     editWorldBtn: 'Edit the world',
     timeSkipBtn: 'Skip ahead in time',
+    povBtn: 'See a scene from another point of view',
     purgeImagesBtn: 'Purge this save\'s images',
     purgeImagesConfirm: 'Delete every image already generated in this save? Turn text is kept — only images are cleared.',
     purgeImagesStatus: 'Images deleted.',
@@ -263,6 +273,14 @@ const UI = {
     timeSkipThinking: 'Time passes...',
     timeSkipEcho: hint => hint ? `⏩ Time skip: ${hint}` : '⏩ Time skip',
     timeSkipBadge: elapsed => `⏩ ${elapsed} passed`,
+    povCharacterLabel: 'Through whose eyes?',
+    povHintLabel: 'What should this scene show?',
+    povHintHint: '(optional — leave blank to let the narrator choose)',
+    povConfirmBtn: '🎭 See this scene',
+    povThinking: 'The narrator shifts perspective...',
+    povEcho: (name, hint) => hint ? `🎭 Through ${name}'s eyes: ${hint}` : `🎭 Through ${name}'s eyes`,
+    povBadge: name => `🎭 Through ${name}'s eyes`,
+    povNoCharacters: 'No characters you\'ve met are available yet.',
     cancelBtn: 'Cancel',
     saveBtn: 'Save',
     sendBtn: 'Send',
@@ -453,6 +471,7 @@ let currentSave = null;     // last-fetched save object (gameOver, activeCharact
 let currentTurns = [];      // all turns of the open save, oldest first — one "page" each
 let currentPageIndex = 0;   // which turn is currently displayed
 let currentTimelineEvents = []; // past time skips (see gameEngine.js's timelineEvents), keyed by turnNumber for the badge in renderPage
+let currentSaveCharacters = []; // characters met so far in this save (see server.js's saveCharacters), for the POV picker
 let debugModeOn = false;    // "mode auteur": reveals hidden info (secret info box, outcome badges) -- talking
                              // to the narrator is a separate, always-visible field (#instructionInput below)
 let previousView = 'home';
@@ -1523,6 +1542,7 @@ function applySaveData(data, jumpToLatest) {
   currentSave = data.save;
   currentTurns = data.turns;
   currentTimelineEvents = data.timelineEvents || [];
+  currentSaveCharacters = data.saveCharacters || [];
 
   showView('story');
   document.getElementById('storyTitle').textContent = data.world.title;
@@ -1683,7 +1703,11 @@ function renderPage() {
   // gameEngine.js's recordTimelineEvent).
   const timelineEvent = currentTimelineEvents.find(e => e.turnNumber === turn.turnNumber);
   const timeSkipBadge = timelineEvent ? `<div class="time-skip-badge">${escapeHtml(t('timeSkipBadge')(timelineEvent.elapsedDescription))}</div>` : '';
-  content.innerHTML = `<div class="chapter">${actionLine}${timeSkipBadge}${formatChapterText(turn.chapterText)}</div>`;
+  // The POV badge: turn.povCharacter is set only on the one-shot interlude
+  // turns produced by playPovTurnStreaming (see gameEngine.js) -- it never
+  // changes save.activeCharacterId, so this is purely a narration marker.
+  const povBadge = turn.povCharacter ? `<div class="pov-badge">${escapeHtml(t('povBadge')(turn.povCharacter))}</div>` : '';
+  content.innerHTML = `<div class="chapter">${actionLine}${timeSkipBadge}${povBadge}${formatChapterText(turn.chapterText)}</div>`;
 
   const gameOver = isLatest ? currentSave.gameOver : null;
   renderGameOver(gameOver);
@@ -1980,6 +2004,84 @@ async function playTimeSkip(hint) {
   }
 }
 
+async function playPov(character, hint) {
+  const hintEl = document.getElementById('povHintInput');
+  hintEl.value = '';
+  resizeTextarea(hintEl);
+  document.getElementById('povPopover').classList.add('hidden');
+
+  const content = document.getElementById('pageContent');
+  const echoedAction = document.createElement('div');
+  echoedAction.className = 'player-action';
+  echoedAction.textContent = t('povEcho')(character, hint);
+  content.appendChild(echoedAction);
+  const pending = document.createElement('p');
+  pending.className = 'loading';
+  pending.textContent = t('povThinking');
+  content.appendChild(pending);
+  document.getElementById('suggestedActions').innerHTML = '';
+
+  const providerOverride = resolveProviderOverride();
+  const updatedAtBefore = currentSave.updatedAt;
+  let streaming = null;
+  try {
+    const res = await fetch(`${API}/saves/${currentSaveId}/pov/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ character, hint, debug: debugModeOn, ...(providerOverride ? { providerOverride } : {}) })
+    });
+    if (!res.ok || !res.body) throw new Error(t('illegibleResponse')(res.status));
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let streamedText = '';
+    let doneEvent = null;
+    let errorMessage = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let newlineIndex;
+      while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+        const line = buffer.slice(0, newlineIndex).trim();
+        buffer = buffer.slice(newlineIndex + 1);
+        if (!line) continue;
+        let event;
+        try { event = JSON.parse(line); } catch (e) { continue; }
+        if (event.type === 'chunk') {
+          if (!streaming) {
+            pending.remove();
+            streaming = document.createElement('p');
+            streaming.className = 'chapter-streaming';
+            content.appendChild(streaming);
+          }
+          streamedText += event.text;
+          streaming.textContent = streamedText;
+        } else if (event.type === 'done') {
+          doneEvent = event;
+        } else if (event.type === 'error') {
+          errorMessage = event.message;
+        }
+      }
+    }
+
+    if (errorMessage) throw new Error(errorMessage);
+    if (!doneEvent) throw new Error(t('illegibleResponse')(res.status));
+    await refreshSave(true);
+  } catch (e) {
+    if (!(await attemptRecovery(updatedAtBefore))) {
+      echoedAction.remove();
+      pending.remove();
+      if (streaming) streaming.remove();
+      hintEl.value = hint;
+      resizeTextarea(hintEl);
+      alert(t('errorPrefix') + e.message + t('retryHint'));
+    }
+  }
+}
+
 document.getElementById('actionForm').onsubmit = (e) => {
   e.preventDefault();
   const actionText = document.getElementById('actionInput').value.trim();
@@ -1992,6 +2094,7 @@ autoGrowTextarea(document.getElementById('instructionInput'), () => document.get
 autoGrowTextarea(document.getElementById('regenerateActionInput'));
 autoGrowTextarea(document.getElementById('regenerateNoteInput'));
 autoGrowTextarea(document.getElementById('timeSkipHintInput'));
+autoGrowTextarea(document.getElementById('povHintInput'));
 
 document.getElementById('prevPageBtn').onclick = () => {
   if (currentPageIndex > 0) { currentPageIndex--; renderPage(); }
@@ -2148,6 +2251,31 @@ document.getElementById('timeSkipCancelBtn').onclick = () => {
 document.getElementById('timeSkipConfirmBtn').onclick = () => {
   const hint = document.getElementById('timeSkipHintInput').value.trim();
   playTimeSkip(hint);
+};
+
+document.getElementById('povBtn').onclick = () => {
+  const select = document.getElementById('povCharacterSelect');
+  select.innerHTML = currentSaveCharacters.map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join('');
+  const confirmBtn = document.getElementById('povConfirmBtn');
+  if (!currentSaveCharacters.length) {
+    select.disabled = true;
+    confirmBtn.disabled = true;
+    select.innerHTML = `<option value="">${escapeHtml(t('povNoCharacters'))}</option>`;
+  } else {
+    select.disabled = false;
+    confirmBtn.disabled = false;
+  }
+  document.getElementById('povHintInput').value = '';
+  document.getElementById('povPopover').classList.remove('hidden');
+};
+document.getElementById('povCancelBtn').onclick = () => {
+  document.getElementById('povPopover').classList.add('hidden');
+};
+document.getElementById('povConfirmBtn').onclick = () => {
+  const character = document.getElementById('povCharacterSelect').value;
+  if (!character) return;
+  const hint = document.getElementById('povHintInput').value.trim();
+  playPov(character, hint);
 };
 
 document.getElementById('purgeImagesBtn').onclick = async () => {

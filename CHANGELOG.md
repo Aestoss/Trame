@@ -1,5 +1,82 @@
 # Changelog
 
+## 2026-09-23 — Mécanique de changement de point de vue (POV)
+
+Ajouté hors plan de migration, à la demande explicite, en réaction directe à
+une préoccupation posée en cours de route : forcer l'IA à changer de point
+de vue longtemps finit par lui faire mélanger ce que le héros et le
+personnage temporaire savent respectivement. La contrainte demandée était
+un « mur » net entre ce que chaque personnage sait, pas seulement que ça
+« ait été écrit ». Déclenchement exclusivement joueur/auteur, jamais
+autonome (contrairement à l'ellipse temporelle) — décision explicite de
+l'utilisateur face aux options proposées.
+
+- **`memoryFacts.knownBy`** (nouveau champ, `string[] | null`, défaut
+  `null` = connu publiquement) : distinct de `character` (qui déjà présent
+  taguait le *sujet* du fait) — `knownBy` tague l'*audience*, qui a
+  effectivement connaissance du fait. Appliqué au moment de la récupération
+  (`searchMemoryFactsByEmbedding`/`retrieveRelevantFacts`, nouveau
+  paramètre `viewerCharacter`), pas laissé au jugement du modèle — c'est
+  exactement le mur demandé, imposé mécaniquement plutôt qu'espéré d'une
+  instruction de prompt. Généralise au-delà du POV : tout partage
+  d'information privée/secrète entre personnages passe par le même champ.
+- **Scènes POV = un seul tour, autonome, sans changer `activeCharacterId`**
+  : le personnage contrôlé par le joueur ne change jamais — c'est un
+  procédé de narration ponctuel (une scène « pendant ce temps, ailleurs »),
+  pas un changement de personnage persistant. Répond directement à
+  l'inquiétude de départ : rien à suivre sur la durée, donc rien où l'IA
+  puisse perdre le fil.
+- **Voix narrative** : toujours à la troisième personne pour le personnage
+  POV — « tu »/« vous » reste réservé au héros pendant toute la partie,
+  pour qu'il n'y ait jamais d'ambiguïté sur qui agit.
+- **`buildPovPrompt`/`buildPovMasterPrompt`** (nouveau prompt dédié,
+  toujours single-shot) : bloc « VIEWPOINT CHARACTER » à la place de
+  « PLAYER CHARACTER », aucun `secretInfo` (c'est l'état caché du
+  héros/narrateur, pas de ce personnage), pas de bloc RECENT SCENES verbeux
+  (même raisonnement que l'ellipse temporelle : une seule ancre « CURRENT
+  SITUATION »), `outcome`/`skill_used`/`game_over`/`suggested_actions`
+  toujours forcés à `n/a`/`null`/`null`/`[]` — il n'y a rien ici sur quoi le
+  joueur agit. Le héros n'apparaît que comme une entrée synthétique dans
+  OTHER CHARACTERS, filtrée par le même mur `knownBy`.
+- **Archivist** : `buildArchivistPrompt`/`buildArchivistMasterPrompt`
+  reçoivent un `povCharacter` optionnel qui change la consigne KNOWN BY —
+  sur une scène POV, les nouveaux faits sont par défaut sus au minimum du
+  personnage POV, avec instruction explicite de ne pas supposer que le
+  héros (absent de la scène) les connaît ; sur un tour normal, le
+  comportement par défaut ne change pas (`knownBy: null`, public).
+- **`playPovTurnStreaming`** (nouvelle fonction, `lib/gameEngine.js`) :
+  même mécanique de streaming que `playTimeSkipStreaming`
+  (`===CHAPTER===`/`===META===`), route dédiée
+  `POST /api/saves/:id/pov/stream`. Le tour produit porte
+  `turn.povCharacter` (nom du personnage narré, `null` sur un tour normal).
+- **UI** : bouton 🎭 à côté du bouton ⏩, ouvre un sélecteur de personnage
+  (alimenté par `saveCharacters`, désormais exposé par
+  `GET /api/saves/:id`) plus un champ d'indication optionnel sur ce que la
+  scène doit montrer. Badge « 🎭 Du point de vue de X » affiché sur la page
+  concernée, même traitement visuel que le badge d'ellipse temporelle.
+
+Vérifié de bout en bout (fournisseur mock) : tour normal → scène POV
+(troisième personne, `suggestedActions` vide, `povCharacter` correctement
+posé) → nouveau fait tagué `knownBy: ["Keeper Oduya"]` par l'Archivist.
+Mur de connaissance testé dans les deux sens via un appel direct à
+`retriever.retrieveRelevantFacts` : vu par le héros, seul le fait public
+apparaît (le fait privé de la scène POV est bien filtré) ; vu par le
+personnage POV lui-même, les deux apparaissent. Rewind sur le tour POV :
+le fait `knownBy`-tagué disparaît avec le tour (même mécanisme que
+n'importe quel autre fait, aucune table dédiée à nettoyer). Régénération du
+tour rewindé avec une action normale : redevient un tour normal, `povCharacter`
+repasse à `null`. Suppression en cascade d'un monde/d'une sauvegarde :
+toutes les tables (`worlds`, `saves`, `turns`, `memoryFacts`, `storyClock`,
+`timelineEvents`, `saveCharacters`, `costLog`) reviennent à 0. Aucune
+erreur sur l'ensemble de la session de test.
+
+Même limite connue que l'ellipse temporelle, et pour la même raison :
+régénérer un tour qui était une scène POV le repasse par le chemin de tour
+normal (`regenerateTurn`/`regenerateTurnStreaming` ne passent pas
+`povCharacter`) — l'identité « ceci était une scène POV » n'est pas
+préservée à la régénération. Pas bloquant, à revisiter si ça gêne en
+pratique.
+
 ## 2026-09-23 — Mécanique d'ellipse temporelle (avant le Milestone 3)
 
 Ajouté hors plan de migration, à la demande explicite : l'IA a souvent du

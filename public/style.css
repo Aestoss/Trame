@@ -456,6 +456,16 @@ input[type="range"] { width: 100%; margin: 6px 0 4px; accent-color: var(--accent
   margin-bottom: 8px;
   font-style: italic;
 }
+/* The POV mechanic's perspective-shift badge (see renderPage in app.js) --
+   same treatment as .time-skip-badge, both are structural markers rather
+   than story text. */
+.pov-badge {
+  font-family: var(--sans);
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+  font-style: italic;
+}
 .chapter p { margin: 0 0 14px; }
 .chapter p:last-child { margin-bottom: 0; }
 

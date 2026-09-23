@@ -10,16 +10,22 @@ plutôt que par troncature, plan de migration en 5 étapes). Inspirée
 également d'[Infinite Worlds](https://infiniteworlds.app) (voir
 `docs/INFINITE_WORLDS_REFERENCE.md`).
 
-**Statut actuel : Milestone 2 + mécanique d'ellipse temporelle.** Le
-Retriever tourne : les faits pertinents pour un tour (pool général + faits
-par personnage) sont sélectionnés par similarité (embeddings + sqlite-vec)
-plutôt que par un plafond de récence. L'Archivist tourne en tâche de fond
-(hors du chemin critique du joueur), et l'horloge narrative (`storyClock`)
-est lue et alimentée à chaque tour. En plus du plan de migration : une
-mécanique d'ellipse temporelle (autonome ou déclenchée par le joueur via
-le bouton ⏩) avec sa propre « frise chronologique » (`timelineEvents`) —
-voir CHANGELOG.md. Proofreader et Mastermind restent à implémenter (voir
-`roles/`, chacun documente son propre jalon). Pas encore déployé.
+**Statut actuel : Milestone 2 + mécanique d'ellipse temporelle + mécanique
+de point de vue (POV).** Le Retriever tourne : les faits pertinents pour un
+tour (pool général + faits par personnage) sont sélectionnés par similarité
+(embeddings + sqlite-vec) plutôt que par un plafond de récence. L'Archivist
+tourne en tâche de fond (hors du chemin critique du joueur), et l'horloge
+narrative (`storyClock`) est lue et alimentée à chaque tour. En plus du plan
+de migration : une mécanique d'ellipse temporelle (autonome ou déclenchée
+par le joueur via le bouton ⏩) avec sa propre « frise chronologique »
+(`timelineEvents`), et une mécanique de changement de point de vue
+(déclenchée uniquement par le joueur via le bouton 🎭 — jamais autonome) qui
+raconte un tour à la troisième personne du point de vue d'un personnage
+rencontré, sans jamais changer le personnage contrôlé par le joueur, avec un
+mur de connaissance (`memoryFacts.knownBy`) qui empêche un fait appris dans
+une scène POV de fuiter vers le héros — voir CHANGELOG.md. Proofreader et
+Mastermind restent à implémenter (voir `roles/`, chacun documente son propre
+jalon). Pas encore déployé.
 
 ## Fonctionnalités
 
@@ -51,6 +57,11 @@ voir CHANGELOG.md. Proofreader et Mastermind restent à implémenter (voir
   faits pertinents pour un tour (pool général et par personnage) sont
   sélectionnés par similarité (embeddings + sqlite-vec, voir
   `roles/retriever.js`) plutôt que par un plafond de récence.
+- **Point de vue (POV)** : voir une scène à la troisième personne à travers
+  les yeux d'un personnage rencontré (bouton 🎭, déclenché uniquement par le
+  joueur) — un tour ponctuel, sans jamais changer le personnage contrôlé.
+  Un mur de connaissance (`memoryFacts.knownBy`) garantit qu'un fait appris
+  dans cette scène ne fuite pas vers le héros s'il n'y était pas.
 - **Interface traduite** (français/anglais) suivant le réglage de langue,
   installable comme PWA sur téléphone.
 - **Suivi des coûts** IA (jetons + estimation $) et fournisseurs

@@ -26,10 +26,15 @@ const { embedFact } = require('../lib/embedFact');
 // deliverable asks for it), so for now the Archivist just piggybacks on
 // whatever provider is already configured, same as every other call before
 // this role existed.
-async function extractFacts({ worldId, saveId, turnNumber, playerAction, chapterText, characterNames, settings }) {
+// povCharacter: set when the chapter being extracted from was a POV scene
+// (see buildPovPrompt/playPovTurnStreaming) -- the MC was explicitly not
+// present, so buildArchivistPrompt needs to scope known_by to whoever
+// actually was, instead of defaulting new facts to "publicly known" the
+// way a normal MC-POV chapter's facts do.
+async function extractFacts({ worldId, saveId, turnNumber, playerAction, chapterText, characterNames, povCharacter, settings }) {
   const provider = settings.textProvider;
   const model = settings.textModel;
-  const { system, user } = buildArchivistPrompt({ characterNames, playerAction, chapterText, language: settings.language });
+  const { system, user } = buildArchivistPrompt({ characterNames, playerAction, chapterText, povCharacter, language: settings.language });
 
   let raw;
   try {
@@ -57,9 +62,9 @@ async function extractFacts({ worldId, saveId, turnNumber, playerAction, chapter
   }
 
   for (const rawFact of parsed.new_facts || []) {
-    const { fact, character, type } = normalizeNewFact(rawFact);
+    const { fact, character, type, knownBy } = normalizeNewFact(rawFact);
     if (!fact) continue;
-    const row = newMemoryFact({ saveId, turnNumber, fact, character, type });
+    const row = newMemoryFact({ saveId, turnNumber, fact, character, type, knownBy });
     row.embedding = await embedFact(fact, settings, `save ${saveId}, turn ${turnNumber}`);
     db.get('memoryFacts').push(row).write();
   }

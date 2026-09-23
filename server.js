@@ -19,7 +19,7 @@ const {
   addTrackedItem, updateTrackedItem, deleteTrackedItem,
   addNpc, updateNpc, deleteNpc,
   createSave, getSave, selectCharacter, continueAfterVictory, deleteSave, purgeSaveImages,
-  playTurn, playTurnStreaming, playTimeSkipStreaming, rewindToTurn, regenerateTurn, regenerateTurnStreaming, getSettings,
+  playTurn, playTurnStreaming, playTimeSkipStreaming, playPovTurnStreaming, rewindToTurn, regenerateTurn, regenerateTurnStreaming, getSettings,
   listAvailableOllamaModels, getOllamaStatus, listAvailableLocalSdModels
 } = require('./lib/gameEngine');
 const { getTotalCosts, getWorldCosts } = require('./lib/costTracker');
@@ -411,11 +411,17 @@ app.get('/api/saves/:id', (req, res) => {
     // after a streamed turn completes (see app.js's refreshSave), so a
     // skip appears the moment it's recorded.
     const timelineEvents = db.get('timelineEvents').filter({ saveId: save.id }).sortBy('turnNumber').value();
+    // Lean on purpose (no status/appearance/location/facts -- author-only
+    // detail, not needed client-side): just enough for the POV picker (see
+    // the POV mechanic) to list who the player can switch perspective to.
+    const saveCharacters = db.get('saveCharacters').filter({ saveId: save.id }).value()
+      .map(c => ({ id: c.id, name: c.name, role: c.role, oneLiner: c.oneLiner }));
     res.json({
       save: debug ? save : publicSave(save),
       world,
       turns,
       timelineEvents,
+      saveCharacters,
       playableCharacters: worldPlayableCharacters(world.id)
     });
   } catch (e) {
@@ -538,6 +544,42 @@ app.post('/api/saves/:id/time-skip/stream', async (req, res) => {
   try {
     const save = getSave(req.params.id);
     const turn = await playTimeSkipStreaming(req.params.id, hint, {
+      providerOverride,
+      onChapterChunk: (text) => send({ type: 'chunk', text })
+    });
+    const itemDefs = db.get('trackedItemDefs').filter({ worldId: save.worldId }).value();
+    send({ type: 'done', turn: publicTurn(turn, { debug: Boolean(debug), itemDefs }) });
+  } catch (e) {
+    console.error(e);
+    send({ type: 'error', message: e.message });
+  } finally {
+    res.end();
+  }
+});
+
+// The player/author-initiated half of the POV mechanic (see
+// lib/memoryFacts.js's knownBy and buildPovPrompt in lib/promptBuilder.js
+// for how the knowledge wall is enforced). Same newline-delimited JSON
+// event protocol as the routes above. character is required (an exact
+// name from GET /api/saves/:id's saveCharacters); hint is optional free
+// text for what the scene should show.
+app.post('/api/saves/:id/pov/stream', async (req, res) => {
+  const { character, hint, debug, providerOverride } = req.body;
+  if (!character || !character.trim()) {
+    res.status(400).json({ error: 'character is required' });
+    return;
+  }
+
+  res.writeHead(200, {
+    'content-type': 'application/x-ndjson; charset=utf-8',
+    'cache-control': 'no-cache',
+    'x-accel-buffering': 'no'
+  });
+  const send = (event) => res.write(JSON.stringify(event) + '\n');
+
+  try {
+    const save = getSave(req.params.id);
+    const turn = await playPovTurnStreaming(req.params.id, character.trim(), hint, {
       providerOverride,
       onChapterChunk: (text) => send({ type: 'chunk', text })
     });

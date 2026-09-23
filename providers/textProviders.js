@@ -526,13 +526,28 @@ async function callMock({ system, user }) {
   // by their distinctive system-prompt markers so the mock produces the
   // matching shape instead of falling into the single-call hooks below,
   // which would return the old, incompatible shape.
-  // Checked before isNarration: both prompts share the same ===CHAPTER===
-  // wire format (see buildTimeSkipMasterPrompt's own comment), so the
-  // time-skip prompt needs its own, more specific marker checked first.
+  // Checked before isNarration: all three of these share the same
+  // ===CHAPTER=== wire format (see buildTimeSkipMasterPrompt's own comment),
+  // so each needs its own, more specific marker checked first.
   const isTimeSkip = /explicitly asked to skip ahead in time/.test(system || '');
-  const isNarration = !isTimeSkip && /===CHAPTER===/.test(system || '');
+  const povMatch = (system || '').match(/has asked to see a scene through (.+?)'s eyes/);
+  const isPov = Boolean(povMatch);
+  const isNarration = !isTimeSkip && !isPov && /===CHAPTER===/.test(system || '');
   const isState = /You maintain the hidden bookkeeping/.test(system || '');
   const isArchivist = /You extract structured facts from a single chapter/.test(system || '');
+
+  if (isPov) {
+    const povCharacterName = povMatch[1];
+    const requestMatch = user.match(/PLAYER'S REQUEST FOR THIS SCENE: (.*)/);
+    const hint = (requestMatch && requestMatch[1] && !/^\(no specifics given/.test(requestMatch[1])) ? requestMatch[1] : '';
+    return {
+      usage: noUsage,
+      text: `===CHAPTER===\nMeanwhile, through ${povCharacterName}'s eyes: ` +
+        (hint ? `${hint}. ` : 'the fog looked different from here, thinner in places no one else had reason to notice. ') +
+        `${povCharacterName} lingered a moment longer than they needed to, turning something over that wasn't theirs to share.\n===META===\n` +
+        JSON.stringify({ outcome: 'n/a', skill_used: null, game_over: null, suggested_actions: [] })
+    };
+  }
 
   if (isTimeSkip) {
     const hintMatch = user.match(/PLAYER'S REQUEST FOR THIS SKIP: (.*)/);
@@ -593,14 +608,23 @@ async function callMock({ system, user }) {
 
   if (isArchivist) {
     const tookLantern = /take the lantern/i.test(user);
+    // The POV mechanic's knowledge wall (see buildArchivistMasterPrompt's
+    // "KNOWN BY" section): a POV-scene chapter tags its own facts as known
+    // only by the POV character, never the (absent) player character --
+    // exercised here so the mock provider actually tests the wall in the
+    // "learned during a POV scene, must not leak to the MC" direction.
+    const povCharacterMatch = (system || '').match(/narrated from (.+?)'s perspective, without the player character present/);
+    const povCharacterName = povCharacterMatch && povCharacterMatch[1];
     return {
       usage: noUsage,
-      // Exercises the { fact, character, type } shape (see
+      // Exercises the { fact, character, type, known_by } shape (see
       // buildArchivistPrompt's NEW FACTS section) rather than only ever
       // sending an empty array — otherwise the mock provider would never
       // catch a regression in how the Archivist stores/renders these.
       text: JSON.stringify({
-        new_facts: tookLantern ? [{ fact: 'Keeper Oduya has tended the lighthouse for eleven years.', character: 'Keeper Oduya', type: 'biographical' }] : []
+        new_facts: povCharacterName
+          ? [{ fact: `${povCharacterName} noticed something they haven't told anyone.`, character: povCharacterName, type: 'plot', known_by: [povCharacterName] }]
+          : tookLantern ? [{ fact: 'Keeper Oduya has tended the lighthouse for eleven years.', character: 'Keeper Oduya', type: 'biographical', known_by: null }] : []
       })
     };
   }
