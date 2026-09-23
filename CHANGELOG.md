@@ -1,5 +1,57 @@
 # Changelog
 
+## 2026-09-23 — Milestone 4 : détection de contradiction complète du Proofreader
+
+Complète le Proofreader du Milestone 3 (qui ne vérifiait que le rythme
+temporel contre `storyClock`) avec le second volet annoncé dans son propre
+commentaire d'origine : une vérification contre les faits enregistrés,
+au-delà du seul rythme temporel.
+
+- **Récupération omnisciente** (`lib/db.js` : nouveau paramètre
+  `omniscient` sur `searchMemoryFactsByEmbedding`, répercuté dans
+  `roles/retriever.js`) : contourne délibérément le mur de connaissance
+  `knownBy` du mécanisme POV. Ce mur existe pour empêcher un *personnage*
+  de savoir quelque chose qu'il n'a aucun moyen de savoir — il n'a jamais
+  eu vocation à cacher des faits à une vérification de cohérence narrateur,
+  qui doit au contraire voir un fait privé ou un secret : c'est justement
+  le genre de détail qu'une contradiction peut concerner.
+- Le chapitre qui vient d'être écrit est maintenant vérifié contre les
+  faits les plus pertinents pour lui (`gameEngine.js`'s `fireProofreader`
+  interroge `retriever.retrieveRelevantFacts` avec le texte du chapitre
+  comme requête, `omniscient: true`) — même mécanisme borné par similarité
+  que le bloc KNOWN FACTS du Writer, volontairement pas un déversement de
+  l'archive entière à chaque tour (coût et latence réels sur une longue
+  sauvegarde, pour un bénéfice décroissant).
+- `buildProofreaderPrompt`/`buildProofreaderMasterPrompt` : le modèle
+  vérifie maintenant deux choses, et seulement deux — le rythme temporel
+  (inchangé depuis le Milestone 3) et une contradiction factuelle concrète
+  (un nom, un chiffre, une date, un lien entre personnages qui ne peut pas
+  être vrai en même temps que ce qui est déjà enregistré). Forme de
+  réponse changée d'un objet `contradiction` nullable unique à un tableau
+  `contradictions` (chaque entrée taguée `type: "pacing" | "fact"`) — un
+  même chapitre peut légitimement cumuler les deux.
+- `roles/proofreader.js` : `checkChapter` accepte désormais `relevantFacts`
+  et écrit une ligne `proofreaderFlags` par contradiction trouvée (la table
+  n'a jamais eu de contrainte d'unicité sur `(saveId, turnNumber)`, donc
+  plusieurs lignes pour un même tour est la forme attendue, pas un bug).
+- Surfaçage frontend (`.proofreader-flag-box`) : affiche désormais tous les
+  signalements d'un tour, chacun préfixé selon son type
+  (`proofreaderFlagPacingPrefix`/`proofreaderFlagFactPrefix`), toujours
+  strictement réservé au mode auteur.
+
+Vérifié de bout en bout (fournisseur mock, nouveau déclencheur d'action
+« fact test » en plus de « pacing test ») : un fait enregistré par
+l'Archivist sur un tour antérieur (« Keeper Oduya tient le phare depuis
+onze ans ») est bien retrouvé par la récupération omnisciente réelle (pas
+un raccourci codé en dur) lorsqu'un tour ultérieur la présente comme étant
+« à son premier jour » — signalement `type: "fact"` produit. Le chemin
+« rythme temporel » du Milestone 3 continue de fonctionner sans
+régression. Un tour normal ne produit aucun signalement. Mode auteur :
+signalements absents sans `debug=1`, présents avec. Rewind/suppression en
+cascade : nettoyage correct de `proofreaderFlags` quel que soit le nombre
+de lignes pour un tour donné. Aucune erreur dans les logs sur l'ensemble
+de la session de test.
+
 ## 2026-09-23 — Milestone 3 : le Proofreader et le Mastermind
 
 Les deux rôles restants du plan de migration (voir le doc de conception

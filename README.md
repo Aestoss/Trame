@@ -10,17 +10,21 @@ plutôt que par troncature, plan de migration en 5 étapes). Inspirée
 également d'[Infinite Worlds](https://infiniteworlds.app) (voir
 `docs/INFINITE_WORLDS_REFERENCE.md`).
 
-**Statut actuel : Milestone 3 (plan de migration complet : Writer,
-Retriever, Archivist, Proofreader, Mastermind) + mécanique d'ellipse
-temporelle + mécanique de point de vue (POV).** Le Retriever tourne : les
-faits pertinents pour un tour (pool général + faits par personnage) sont
+**Statut actuel : Milestone 4 (plan de migration complet : Writer,
+Retriever, Archivist, Proofreader, Mastermind, y compris la détection de
+contradiction complète du Proofreader) + mécanique d'ellipse temporelle +
+mécanique de point de vue (POV).** Le Retriever tourne : les faits
+pertinents pour un tour (pool général + faits par personnage) sont
 sélectionnés par similarité (embeddings + sqlite-vec) plutôt que par un
 plafond de récence. L'Archivist tourne en tâche de fond (hors du chemin
 critique du joueur), et l'horloge narrative (`storyClock`) est lue et
-alimentée à chaque tour. Le Proofreader vérifie (première passe, étroite à
-dessein) que le langage de rythme temporel d'un chapitre reste cohérent
-avec `storyClock`, et signale une contradiction en mode auteur uniquement.
-Le Mastermind maintient un plan narratif caché (rythme périodique, jamais
+alimentée à chaque tour. Le Proofreader vérifie deux choses sur chaque
+chapitre — le rythme temporel contre `storyClock`, et toute contradiction
+factuelle concrète contre les faits les plus pertinents de l'archive,
+récupérés de façon omnisciente (au-delà du mur de connaissance `knownBy`,
+puisqu'il s'agit d'une vérification narrateur, pas d'un personnage) — et
+signale chaque contradiction trouvée en mode auteur uniquement. Le
+Mastermind maintient un plan narratif caché (rythme périodique, jamais
 montré au joueur ni à l'auteur) que le Writer peut mobiliser sans y être
 obligé. En plus du plan de migration : une mécanique d'ellipse temporelle
 (autonome ou déclenchée par le joueur via le bouton ⏩) avec sa propre
@@ -62,10 +66,12 @@ CHANGELOG.md. Pas encore déployé.
   faits pertinents pour un tour (pool général et par personnage) sont
   sélectionnés par similarité (embeddings + sqlite-vec, voir
   `roles/retriever.js`) plutôt que par un plafond de récence.
-- **Proofreader** (`roles/proofreader.js`) : vérification de cohérence
-  étroite, à dessein — uniquement le langage de rythme temporel d'un
-  chapitre contre `storyClock`. Une contradiction détectée est signalée en
-  mode auteur uniquement, jamais visible du joueur.
+- **Proofreader** (`roles/proofreader.js`) : vérifie chaque chapitre sur
+  deux plans — le langage de rythme temporel contre `storyClock`, et toute
+  contradiction factuelle concrète contre les faits les plus pertinents de
+  l'archive (récupération omnisciente, au-delà du mur `knownBy` : c'est une
+  vérification narrateur, pas celle d'un personnage). Chaque contradiction
+  trouvée est signalée en mode auteur uniquement, jamais visible du joueur.
 - **Mastermind** (`roles/mastermind.js`) : plan narratif caché (futurs
   développements, événements de fond), révisé sur un rythme périodique et
   mobilisable par le Writer sans y être obligé — jamais montré au joueur,
@@ -120,8 +126,8 @@ lib/costTracker.js           → enregistrement et agrégation des coûts d'appe
 providers/textProviders.js   → Anthropic / OpenAI / OpenRouter / Gemini / Ollama / démo
 providers/imageProviders.js  → Stability / Replicate / Stable Diffusion local / démo
 providers/embeddingProviders.js → mock (hashing local, sans clé) / Gemini (text-embedding-004)
-roles/                        → Writer, Archivist, Retriever (actifs) ; Proofreader/Mastermind
-                                 sont des stubs qui documentent leur propre jalon de migration
+roles/                        → Writer, Archivist, Retriever, Proofreader, Mastermind
+                                 (les 5 rôles du plan de migration, tous actifs)
 public/                      → interface (HTML/CSS/JS), installable en PWA
 scripts/windows/              → pont PC local (Ollama/Forge/Chroma, tunnel Tailscale)
 docs/INFINITE_WORLDS_REFERENCE.md → analyse de référence ayant guidé la conception

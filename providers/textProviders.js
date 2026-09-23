@@ -535,7 +535,7 @@ async function callMock({ system, user }) {
   const isNarration = !isTimeSkip && !isPov && /===CHAPTER===/.test(system || '');
   const isState = /You maintain the hidden bookkeeping/.test(system || '');
   const isArchivist = /You extract structured facts from a single chapter/.test(system || '');
-  const isProofreader = /narrow continuity checker/.test(system || '');
+  const isProofreader = /You are a continuity checker/.test(system || '');
   const isMastermind = /hidden Mastermind behind/.test(system || '');
 
   if (isPov) {
@@ -582,6 +582,17 @@ async function callMock({ system, user }) {
     if (/\bpacing test\b/i.test(action)) {
       return { usage: noUsage, text: '===CHAPTER===\nSeveral weeks slid past in a haze of fog and routine. And yet it had only been this morning that you last stood on these steps, or so it felt.\n===META===\n' + JSON.stringify({ outcome: 'n/a', skill_used: null, game_over: null, suggested_actions: [] }) };
     }
+    // Milestone 4's fact-contradiction path (see the isProofreader branch
+    // below): deliberately contradicts the mock Archivist's own "Keeper
+    // Oduya has tended the lighthouse for eleven years" fact (see isArchivist
+    // below, produced by a prior "take the lantern" turn in the same save)
+    // -- shares enough distinctive words with that fact ("Keeper Oduya",
+    // "lighthouse") for the mock embedder's word-overlap similarity to
+    // actually retrieve it, exercising the real retrieval path rather than
+    // a hardcoded shortcut.
+    if (/\bfact test\b/i.test(action)) {
+      return { usage: noUsage, text: '===CHAPTER===\nKeeper Oduya introduces herself at the lighthouse door. Today is her very first day here, she admits, still finding her way around.\n===META===\n' + JSON.stringify({ outcome: 'n/a', skill_used: null, game_over: null, suggested_actions: [] }) };
+    }
     return {
       usage: noUsage,
       text: '===CHAPTER===\nYou step forward, and the fog seems to lean in around you, as if listening. Somewhere above, the lighthouse lens turns without a keeper\'s hand.\n===META===\n' +
@@ -626,27 +637,41 @@ async function callMock({ system, user }) {
 
   if (isProofreader) {
     // Real logic, not a fixed canned response -- the mock actually checks
-    // the chapter text against the story clock line it was given, the same
+    // the chapter text against the story clock/facts it was given, the same
     // shape of check the real prompt (buildProofreaderPrompt) asks a real
-    // model to do. Deterministic and good enough for a mock: a "long"
-    // elapsed duration alongside an immediate-time phrase in the chapter is
-    // exactly the contradiction this narrow first pass exists to catch.
+    // model to do. Deterministic and good enough for a mock, exercising
+    // both contradiction types (Milestone 4), not just pacing (Milestone 3).
+    const contradictions = [];
+
     const elapsedMatch = user.match(/Time that has just passed: (.+?)\./);
     const elapsed = (elapsedMatch && elapsedMatch[1]) || '';
     const isLongElapsed = /\b(week|weeks|month|months|year|years)\b/i.test(elapsed);
     const immediateMatch = user.match(/\b(this morning|just now|moments ago|right now)\b/i);
     if (isLongElapsed && immediateMatch) {
-      return {
-        usage: noUsage,
-        text: JSON.stringify({
-          contradiction: {
-            summary: `Le chapitre affirme que « ${elapsed} » vient de passer, mais parle aussi de « ${immediateMatch[1]} » comme si c'était immédiat.`,
-            quote: immediateMatch[1]
-          }
-        })
-      };
+      contradictions.push({
+        type: 'pacing',
+        summary: `Le chapitre affirme que « ${elapsed} » vient de passer, mais parle aussi de « ${immediateMatch[1]} » comme si c'était immédiat.`,
+        quote: immediateMatch[1]
+      });
     }
-    return { usage: noUsage, text: JSON.stringify({ contradiction: null }) };
+
+    // See isNarration's "fact test" marker above -- deliberately contradicts
+    // the mock Archivist's "eleven years" tenure fact, only when that fact
+    // actually made it into FACTS ON RECORD (i.e. real retrieval surfaced
+    // it, not a hardcoded assumption that it's always there).
+    const factsBlockMatch = user.match(/FACTS ON RECORD[^\n]*\n([\s\S]*?)\n\nCHAPTER TO CHECK/);
+    const factsText = (factsBlockMatch && factsBlockMatch[1]) || '';
+    const chapterMatch = user.match(/CHAPTER TO CHECK\n([\s\S]*)$/);
+    const chapterOnly = (chapterMatch && chapterMatch[1]) || '';
+    if (/eleven years/i.test(factsText) && /first day/i.test(chapterOnly)) {
+      contradictions.push({
+        type: 'fact',
+        summary: 'Le chapitre présente Keeper Oduya comme étant à son premier jour, mais un fait enregistré indique qu\'elle tient le phare depuis onze ans.',
+        quote: 'first day'
+      });
+    }
+
+    return { usage: noUsage, text: JSON.stringify({ contradictions }) };
   }
 
   if (isMastermind) {

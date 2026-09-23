@@ -38,20 +38,27 @@ async function embedQuery(text, settings) {
 // being searched -- a fact only reaches the prompt if the *viewer*, not
 // just the fact's own subject, is allowed to know it.
 //
+// omniscient (Milestone 4's Proofreader): bypasses the knownBy wall
+// entirely instead of scoping to viewerCharacter -- for a narrator-level
+// caller that needs to check the story's own consistency against every
+// fact on record, private/secret ones included, not just what one
+// character is allowed to know. viewerCharacter is ignored when this is
+// true.
+//
 // Returns { memoryFacts, factsByCharacter } in exactly the shapes
 // lib/promptBuilder.js's buildTurnContextBlocks already expects (mirroring
 // what gatherTurnContext used to build itself via a recency slice):
 // memoryFacts as full fact rows (only .fact is read downstream, but the
 // whole row is kept in case a future milestone wants more of it), and
 // factsByCharacter[name] as plain fact strings.
-async function retrieveRelevantFacts({ saveId, queryText, characterNames, viewerCharacter, limit, settings }) {
+async function retrieveRelevantFacts({ saveId, queryText, characterNames, viewerCharacter, omniscient, limit, settings }) {
   const embedding = await embedQuery(queryText, settings);
   if (!embedding) return { memoryFacts: [], factsByCharacter: {} };
 
-  const memoryFacts = db.searchMemoryFactsByEmbedding({ saveId, embedding, k: limit, character: null, viewerCharacter });
+  const memoryFacts = db.searchMemoryFactsByEmbedding({ saveId, embedding, k: limit, character: null, viewerCharacter, omniscient });
   const factsByCharacter = {};
   for (const name of characterNames || []) {
-    const rows = db.searchMemoryFactsByEmbedding({ saveId, embedding, k: limit, character: name, viewerCharacter });
+    const rows = db.searchMemoryFactsByEmbedding({ saveId, embedding, k: limit, character: name, viewerCharacter, omniscient });
     if (rows.length) factsByCharacter[name] = rows.map(r => r.fact);
   }
   return { memoryFacts, factsByCharacter };

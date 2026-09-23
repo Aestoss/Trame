@@ -68,7 +68,8 @@ const UI = {
     povEcho: (name, hint) => hint ? `🎭 Du point de vue de ${name} : ${hint}` : `🎭 Du point de vue de ${name}`,
     povBadge: name => `🎭 Du point de vue de ${name}`,
     povNoCharacters: "Aucun personnage rencontré n'est disponible pour l'instant.",
-    proofreaderFlagPrefix: 'Incohérence possible de rythme temporel :',
+    proofreaderFlagPacingPrefix: 'Incohérence possible de rythme temporel :',
+    proofreaderFlagFactPrefix: 'Contradiction possible avec un fait enregistré :',
     cancelBtn: 'Annuler',
     saveBtn: 'Enregistrer',
     sendBtn: 'Envoyer',
@@ -282,7 +283,8 @@ const UI = {
     povEcho: (name, hint) => hint ? `🎭 Through ${name}'s eyes: ${hint}` : `🎭 Through ${name}'s eyes`,
     povBadge: name => `🎭 Through ${name}'s eyes`,
     povNoCharacters: 'No characters you\'ve met are available yet.',
-    proofreaderFlagPrefix: 'Possible pacing contradiction:',
+    proofreaderFlagPacingPrefix: 'Possible pacing contradiction:',
+    proofreaderFlagFactPrefix: 'Possible contradiction with a recorded fact:',
     cancelBtn: 'Cancel',
     saveBtn: 'Save',
     sendBtn: 'Send',
@@ -1685,14 +1687,19 @@ function renderPage() {
     secretBox.classList.add('hidden');
   }
 
-  // Proofreader flags (see roles/proofreader.js, Milestone 3): server only
-  // ever sends currentProofreaderFlags when debug=1 was requested (see
+  // Proofreader flags (see roles/proofreader.js, Milestones 3-4): server
+  // only ever sends currentProofreaderFlags when debug=1 was requested (see
   // fetchSaveData), so debugModeOn here is really just deciding whether to
   // show what's already author-only data, same gating as secretBox above.
+  // A single chapter can raise more than one flag since Milestone 4 (e.g. a
+  // pacing issue and a fact issue together), so this renders every flag for
+  // the turn, not just the first.
   const proofreaderFlagBox = document.getElementById('proofreaderFlagBox');
-  const proofreaderFlag = debugModeOn ? currentProofreaderFlags.find(f => f.turnNumber === turn.turnNumber) : null;
-  if (proofreaderFlag) {
-    proofreaderFlagBox.textContent = `⚠️ ${t('proofreaderFlagPrefix')} ${proofreaderFlag.summary}`;
+  const turnFlags = debugModeOn ? currentProofreaderFlags.filter(f => f.turnNumber === turn.turnNumber) : [];
+  if (turnFlags.length) {
+    proofreaderFlagBox.innerHTML = turnFlags
+      .map(f => `⚠️ ${escapeHtml(t(f.type === 'fact' ? 'proofreaderFlagFactPrefix' : 'proofreaderFlagPacingPrefix'))} ${escapeHtml(f.summary)}`)
+      .join('<br>');
     proofreaderFlagBox.classList.remove('hidden');
   } else {
     proofreaderFlagBox.classList.add('hidden');
