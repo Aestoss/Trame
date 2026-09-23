@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-09-23 — Sections repliables dans les réglages
+
+Réglages a accumulé assez de champs (fournisseur + clés texte, modèle
+léger, images + clés) que le défilement était devenu la vraie plainte.
+Chaque `.settings-group` de cette vue (Texte, Modèle léger, Images, Coûts)
+se replie maintenant au clic sur son titre — état mémorisé par section
+(`localStorage`, uniquement côté navigateur, rien à synchroniser côté
+serveur). Texte et Images démarrent repliés (les deux plus longs) ;
+Modèle léger et Coûts restent ouverts par défaut (courts). L'éditeur de
+monde réutilise la même classe `.settings-group` mais n'est pas concerné —
+seules les sections de la vue Réglages sont câblées.
+
+- `public/index.html` : `data-group-id` sur chaque section de Réglages,
+  classe `collapsed` par défaut sur Texte et Images.
+- `public/style.css` : chevron (`::after`, rotation au repli) et masquage
+  du contenu d'une section repliée, scopés à `#view-settings` pour ne pas
+  affecter l'éditeur de monde.
+- `public/app.js` : `initSettingsGroupToggles()` — clic sur le titre bascule
+  `collapsed` et persiste l'état par `data-group-id`.
+
+Vérifié avec Playwright (Chromium headless) : état initial correct par
+section, un clic replie/déplie et l'état choisi survit à un rechargement de
+page, les sections restent indépendantes les unes des autres, aucune
+erreur JS introduite.
+
 ## 2026-09-23 — Modèle léger verrouillé pour les rôles de fond
 
 Nouveau réglage `backgroundModel` (une seule clé API Gemini) utilisé par

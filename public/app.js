@@ -2591,6 +2591,31 @@ document.getElementById('saveSettingsBtn').onclick = async () => {
   setTimeout(() => { document.getElementById('settingsStatus').textContent = ''; }, 2000);
 };
 
+// Collapsible settings-group sections -- Settings has grown enough fields
+// (text provider + keys, background model, images + keys) that scrolling
+// past ones you're not touching was the actual complaint. Collapsed state
+// persists per section across visits (localStorage, per-viewer only -- see
+// artifact-capabilities reasoning: nothing here needs to sync across
+// devices or be readable server-side). Text/Images default collapsed (the
+// two flagged as the worst offenders); Background model/Costs default open
+// since they're short. Scoped to #view-settings's own groups -- the World
+// editor reuses the same .settings-group class but isn't wired up here.
+function initSettingsGroupToggles() {
+  document.querySelectorAll('#view-settings .settings-group[data-group-id]').forEach(group => {
+    const id = group.dataset.groupId;
+    const heading = group.querySelector('h3');
+    if (!heading) return;
+    let stored = null;
+    try { stored = localStorage.getItem(`settingsGroupCollapsed:${id}`); } catch (e) { /* private mode etc. */ }
+    if (stored !== null) group.classList.toggle('collapsed', stored === '1');
+    heading.onclick = () => {
+      const collapsed = group.classList.toggle('collapsed');
+      try { localStorage.setItem(`settingsGroupCollapsed:${id}`, collapsed ? '1' : '0'); } catch (e) { /* ignore */ }
+    };
+  });
+}
+initSettingsGroupToggles();
+
 // ---------- Utils ----------
 
 function escapeHtml(str) {
