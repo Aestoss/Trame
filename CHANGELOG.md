@@ -208,9 +208,9 @@ Vérifié de bout en bout (fournisseur mock) : tour normal → scène POV
 posé) → nouveau fait tagué `knownBy: ["Keeper Oduya"]` par l'Archivist.
 Mur de connaissance testé dans les deux sens via un appel direct à
 `retriever.retrieveRelevantFacts` : vu par le héros, seul le fait public
-apparait (le fait privé de la scène POV est bien filtré) ; vu par le
+apparaît (le fait privé de la scène POV est bien filtré) ; vu par le
 personnage POV lui-même, les deux apparaissent. Rewind sur le tour POV :
-le fait `knownBy`-tagué disparait avec le tour (même mécanisme que
+le fait `knownBy`-tagué disparaît avec le tour (même mécanisme que
 n'importe quel autre fait, aucune table dédiée à nettoyer). Régénération du
 tour rewindé avec une action normale : redevient un tour normal, `povCharacter`
 repasse à `null`. Suppression en cascade d'un monde/d'une sauvegarde :
@@ -270,7 +270,7 @@ la moitié narration diffère, exactement là où le cadrage doit changer.
 Vérifié de bout en bout (fournisseur mock) : ellipse explicite via
 l'endpoint streamé, écriture correcte de `timelineEvents`/`storyClock`,
 le bloc STORY TIMELINE apparaît bien dans le tour suivant, nettoyage
-correct au rewind (l'entrée de l'ellipse disparait, `lastReferencedTurn`
+correct au rewind (l'entrée de l'ellipse disparaît, `lastReferencedTurn`
 est ramené au bon tour) et à la suppression en cascade d'un monde/d'une
 sauvegarde. Aucune erreur sur l'ensemble de la session de test.
 
@@ -327,7 +327,7 @@ en 4ᵉ position, alors qu'aucun des 55 faits les plus récents (tours
 51-105, du remplissage hors-sujet) n'apparaît dans le top 8 — la preuve que
 c'est bien la pertinence qui pilote la sélection, pas la récence. Même
 constat sur une deuxième requête sans rapport (enquête de Detective Voss).
-Régression complète revvérifiée (playthrough, regenerate, rewind,
+Régression complète revérifiée (playthrough, regenerate, rewind,
 suppression en cascade y compris `memoryFacts_vec`) sans erreur.
 
 ## 2026-09-22 — Milestone 1 : l'Archivist devient asynchrone, plafond par personnage, horloge narrative
