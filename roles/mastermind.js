@@ -62,22 +62,27 @@ async function reviewPlan({ worldId, saveId, turnNumber, world, previousPlan, re
   }
 
   const plan = parsed.plan;
-  if (!plan || (!plan.summary && !(Array.isArray(plan.beats) && plan.beats.length))) return;
+  if (!plan || (!plan.summary && !(Array.isArray(plan.beats) && plan.beats.length))) {
+    console.log(`[mastermind] save=${saveId} turn=${turnNumber} provider=${provider} model=${model || '(default)'}: empty plan received, previous plan (if any) left active`);
+    return;
+  }
 
   const newId = uuid();
   if (previousPlan && previousPlan.id) {
     db.get('mastermindPlans').find({ id: previousPlan.id }).assign({ status: 'superseded', supersededBy: newId }).write();
   }
+  const beats = Array.isArray(plan.beats) ? plan.beats.filter(b => typeof b === 'string' && b.trim()).map(b => b.trim()) : [];
   db.get('mastermindPlans').push({
     id: newId,
     saveId,
     turnNumber,
     summary: typeof plan.summary === 'string' ? plan.summary.trim() : '',
-    beats: Array.isArray(plan.beats) ? plan.beats.filter(b => typeof b === 'string' && b.trim()).map(b => b.trim()) : [],
+    beats,
     status: 'active',
     supersededBy: null,
     createdAt: new Date().toISOString()
   }).write();
+  console.log(`[mastermind] save=${saveId} turn=${turnNumber} provider=${provider} model=${model || '(default)'}: plan updated (${beats.length} beat(s))`);
 }
 
 module.exports = { reviewPlan };

@@ -66,6 +66,7 @@ async function checkChapter({ worldId, saveId, turnNumber, chapterText, storyClo
   // a pacing issue and a fact issue at once, and proofreaderFlags has no
   // uniqueness constraint on (saveId, turnNumber), so multiple rows for the
   // same turn is the expected shape here, not a bug.
+  let written = 0;
   for (const c of contradictions) {
     if (!c || typeof c.summary !== 'string' || !c.summary.trim()) continue;
     const type = c.type === 'fact' ? 'fact' : 'pacing';
@@ -78,7 +79,12 @@ async function checkChapter({ worldId, saveId, turnNumber, chapterText, storyClo
       quote: typeof c.quote === 'string' ? c.quote.trim() : null,
       createdAt
     }).write();
+    written++;
   }
+  // Logged every run, including the (common, expected) zero-flags case --
+  // "ran and found nothing" needs to be distinguishable from "never ran" in
+  // the deploy logs alone.
+  console.log(`[proofreader] save=${saveId} turn=${turnNumber} provider=${provider} model=${model || '(default)'}: ${written} flag(s) raised`);
 }
 
 module.exports = { checkChapter };

@@ -57,13 +57,20 @@ async function extractFacts({ worldId, saveId, turnNumber, playerAction, chapter
     return;
   }
 
+  let written = 0;
   for (const rawFact of parsed.new_facts || []) {
     const { fact, character, type, knownBy } = normalizeNewFact(rawFact);
     if (!fact) continue;
     const row = newMemoryFact({ saveId, turnNumber, fact, character, type, knownBy });
     row.embedding = await embedFact(fact, settings, `save ${saveId}, turn ${turnNumber}`);
     db.get('memoryFacts').push(row).write();
+    written++;
   }
+  // Logged on every run, not just failures -- this is what lets a turn's
+  // background activity be confirmed from Railway's own deploy logs alone,
+  // without a debug dump: provider/model actually used (background key vs.
+  // Writer's own), and how many facts actually landed vs. what the model proposed.
+  console.log(`[archivist] save=${saveId} turn=${turnNumber} provider=${provider} model=${model || '(default)'}: ${written}/${(parsed.new_facts || []).length} fact(s) written`);
 }
 
 module.exports = { extractFacts };

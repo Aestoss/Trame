@@ -18,7 +18,7 @@ const {
   regenerateCharacterPortrait, previewCharacterPortrait, acceptCharacterPortrait,
   addTrackedItem, updateTrackedItem, deleteTrackedItem,
   addNpc, updateNpc, deleteNpc,
-  createSave, getSave, selectCharacter, continueAfterVictory, deleteSave, purgeSaveImages,
+  createSave, getSave, selectCharacter, continueAfterVictory, deleteSave, purgeSaveImages, logDebugSnapshot,
   playTurn, playTurnStreaming, playTimeSkipStreaming, playPovTurnStreaming, rewindToTurn, regenerateTurn, regenerateTurnStreaming, getSettings,
   listAvailableOllamaModels, getOllamaStatus, listAvailableLocalSdModels
 } = require('./lib/gameEngine');
@@ -454,6 +454,21 @@ app.post('/api/saves/:id/purge-images', (req, res) => {
   try {
     const result = purgeSaveImages(req.params.id);
     res.json(result);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// Author-mode troubleshooting: dumps this save's full state (recent facts,
+// Mastermind plan, Proofreader flags, per-role cost breakdown, settings) as
+// one JSON line to the deploy log -- see logDebugSnapshot in gameEngine.js.
+// The response body is deliberately just an ack; the point is what lands
+// in the log, readable from Railway without any way to query the live
+// database directly.
+app.post('/api/saves/:id/debug-dump', (req, res) => {
+  try {
+    logDebugSnapshot(req.params.id);
+    res.json({ ok: true });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }

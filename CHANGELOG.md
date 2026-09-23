@@ -1,5 +1,49 @@
 # Changelog
 
+## 2026-09-23 — Outils de débogage pour surveiller les 5 rôles en production
+
+Contexte : impossible pour moi (l'assistant) d'atteindre directement l'URL
+de l'app en production (bloqué par la politique réseau du bac à sable, testé
+avec curl et WebFetch, sur le domaine Railway comme sur les endpoints
+`/api/...`) — donc pas d'accès direct à la base ni à un endpoint HTTP, quel
+qu'il soit. Solution retenue avec l'utilisateur : puisque les journaux de
+déploiement Railway restent lisibles (via l'outil `railway-agent`), faire
+écrire à l'app elle-même tout ce qui est nécessaire au diagnostic dans ses
+propres logs plutôt que d'exposer un endpoint à interroger.
+
+- **Traces systématiques par rôle**, désormais loguées à chaque exécution
+  (pas seulement à l'échec comme avant) — une ligne par appel, métadonnées
+  structurelles uniquement (jamais le contenu du prompt/de la réponse) :
+  - `[writer] kind=... save=... provider=... model=...` (`callText`/
+    `streamTextTracked`, `lib/gameEngine.js`) — chaque appel du Writer
+    (narration, état, ellipse, POV, création de monde...), avec le
+    fournisseur/modèle réellement utilisé (confirme un éventuel fallback).
+  - `[turn] save=... turn=N outcome=...` (`persistTurn`) — un tour persisté,
+    quel que soit le chemin (normal, streaming, ellipse, POV).
+  - `[archivist] save=... turn=N provider=... model=...: X/Y fact(s) written`
+  - `[proofreader] save=... turn=N provider=... model=...: X flag(s) raised`
+    (le cas 0 flag, très majoritaire, est maintenant distinguable d'un rôle
+    qui ne tourne pas du tout).
+  - `[mastermind] save=... turn=N provider=... model=...: plan updated (X beat(s))`
+    ou `: empty plan received` selon le cas.
+- **`logDebugSnapshot(saveId)`** (nouveau, `lib/gameEngine.js`) + route
+  `POST /api/saves/:id/debug-dump` (`server.js`) : instantané complet d'une
+  sauvegarde en une seule ligne JSON dans les logs — tours récents, faits
+  récents de l'Archivist, plan actif complet du Mastermind (jamais visible
+  ailleurs, y compris en mode auteur), tous les signalements du Proofreader,
+  répartition des coûts par rôle, et un résumé des réglages actifs
+  (fournisseur/modèle principal, clé du modèle léger configurée ou non,
+  fournisseur d'images/d'embeddings) — sans jamais renvoyer de clé brute.
+- **Bouton 📋 en mode auteur** (`public/index.html`/`app.js`) : déclenche le
+  dump ci-dessus depuis l'interface, à côté des autres actions réservées au
+  mode auteur (🔍/⏩/🎭/🗑️🖼️).
+
+Vérifié de bout en bout (fournisseur mock, Playwright pour l'UI) : chaque
+rôle produit bien sa ligne de log à chaque tour ; le Mastermind loggue
+correctement au tour 1 (`MASTERMIND_EVERY`) ; le bouton de dump est bien
+caché hors mode auteur, apparaît en mode auteur, et produit une ligne
+`[debug-dump]` contenant un JSON valide et complet en un seul appel.
+
 ## 2026-09-23 — Champ apparence physique pour les personnages jouables
 
 Les personnages non-joueurs (`starting_characters`) avaient déjà un champ

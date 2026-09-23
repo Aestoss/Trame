@@ -38,6 +38,8 @@ const UI = {
     purgeImagesBtn: 'Purger les images de cette partie',
     purgeImagesConfirm: 'Supprimer toutes les images déjà générées dans cette partie ? Le texte des tours est conservé, seules les images sont effacées.',
     purgeImagesStatus: 'Images supprimées.',
+    debugDumpBtn: "Envoyer un instantané de débogage dans les journaux du serveur",
+    debugDumpStatus: 'Instantané envoyé dans les journaux.',
     prevPageBtn: 'Tour précédent',
     prevTurnLabel: 'Précédent',
     nextPageBtn: 'Tour suivant',
@@ -256,6 +258,8 @@ const UI = {
     purgeImagesBtn: 'Purge this save\'s images',
     purgeImagesConfirm: 'Delete every image already generated in this save? Turn text is kept — only images are cleared.',
     purgeImagesStatus: 'Images deleted.',
+    debugDumpBtn: 'Send a debug snapshot to the server logs',
+    debugDumpStatus: 'Snapshot sent to the logs.',
     prevPageBtn: 'Previous turn',
     prevTurnLabel: 'Previous',
     nextPageBtn: 'Next turn',
@@ -1578,6 +1582,7 @@ function applySaveData(data, jumpToLatest) {
     objectiveEl.classList.add('hidden');
   }
   document.getElementById('authorModeBtn').classList.toggle('active', debugModeOn);
+  document.getElementById('debugDumpBtn').classList.toggle('hidden', !debugModeOn);
   document.getElementById('regeneratePopover').classList.add('hidden');
   document.getElementById('timeSkipPopover').classList.add('hidden');
 
@@ -2321,6 +2326,27 @@ document.getElementById('purgeImagesBtn').onclick = async () => {
     if (!res.ok) throw new Error(data.error);
     await refreshSave(false);
     status.textContent = t('purgeImagesStatus');
+    status.classList.remove('hidden');
+  } catch (e) {
+    status.textContent = t('errorPrefix') + e.message;
+    status.classList.remove('hidden');
+  } finally {
+    setTimeout(() => { status.classList.add('hidden'); status.textContent = ''; }, 2500);
+  }
+};
+
+// Author-mode troubleshooting tool: logs this save's full state (recent
+// facts, Mastermind plan, Proofreader flags, cost breakdown, settings) to
+// the server's own deploy log -- see logDebugSnapshot in gameEngine.js.
+// Nothing meaningful comes back in the response; the point is what lands
+// in the log.
+document.getElementById('debugDumpBtn').onclick = async () => {
+  const status = document.getElementById('debugDumpStatus');
+  try {
+    const res = await fetch(`${API}/saves/${currentSaveId}/debug-dump`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    status.textContent = t('debugDumpStatus');
     status.classList.remove('hidden');
   } catch (e) {
     status.textContent = t('errorPrefix') + e.message;
