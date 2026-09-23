@@ -215,11 +215,11 @@ app.delete('/api/worlds/:id', (req, res) => {
 
 app.post('/api/worlds/:id/characters', async (req, res) => {
   try {
-    const { name, description, skills } = req.body;
+    const { name, description, appearance, skills } = req.body;
     // Generates a portrait right away (best-effort, same as an AI-generated
     // character) instead of leaving a manually-added one without an image
     // until someone notices and clicks "Regenerate portrait" by hand.
-    const character = await addCharacterWithPortrait(req.params.id, { name, description, skills });
+    const character = await addCharacterWithPortrait(req.params.id, { name, description, appearance, skills });
     res.json({ ok: true, character });
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -239,8 +239,8 @@ app.post('/api/worlds/:id/characters/generate', async (req, res) => {
 
 app.patch('/api/worlds/:worldId/characters/:characterId', (req, res) => {
   try {
-    const { name, description, skills, initialTrackedItemValues } = req.body;
-    const character = updateCharacter(req.params.worldId, req.params.characterId, { name, description, skills, initialTrackedItemValues });
+    const { name, description, appearance, skills, initialTrackedItemValues } = req.body;
+    const character = updateCharacter(req.params.worldId, req.params.characterId, { name, description, appearance, skills, initialTrackedItemValues });
     res.json({ ok: true, character });
   } catch (e) {
     res.status(400).json({ error: e.message });

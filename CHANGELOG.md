@@ -1,5 +1,54 @@
 # Changelog
 
+## 2026-09-23 — Champ apparence physique pour les personnages jouables
+
+Les personnages non-joueurs (`starting_characters`) avaient déjà un champ
+`appearance` dédié depuis le début ; les personnages jouables n'en avaient
+aucun — seul `description` existait, documenté comme « background,
+personnalité », pas l'apparence physique. Conséquence concrète : le
+portrait généré par IA n'avait souvent rien de concret à représenter, et le
+narrateur ne recevait jamais de description fixe du personnage joué, donc
+rien n'empêchait une contradiction d'un tour à l'autre (âge, carrure,
+origine...). Signalé explicitement par l'utilisateur : le genre/sexe,
+l'origine ethnique et les traits physiques concrets doivent être présents,
+pour le modèle d'image comme pour la cohérence narrative.
+
+- `lib/promptBuilder.js` : nouveau champ `appearance` dans le schéma
+  `playable_characters` de `buildWorldCreationPrompt` (création de monde)
+  et dans `buildCharacterGenerationPrompt` (génération d'un personnage par
+  IA) — consigne explicite : âge, genre/présentation, origine ethnique ou
+  carnation, carrure, cheveux, traits distinctifs, jamais vague ni omis.
+  Consigne équivalente renforcée sur le champ `appearance` déjà existant des
+  `starting_characters`.
+- `buildTurnContextBlocks` : le bloc PLAYER CHARACTER inclut désormais une
+  ligne `Appearance:` quand elle existe — lu à chaque tour, donc le
+  narrateur reste cohérent sur qui est ce personnage au lieu de
+  l'improviser à nouveau à chaque fois.
+- `lib/gameEngine.js` : `appearance` porté de bout en bout — création de
+  monde, `addCharacter`/`addCharacterWithPortrait` (ajout manuel),
+  `generateCharacterWithAI`, `updateCharacter`. `defaultPortraitPromptText`
+  utilise maintenant `appearance` en priorité (avant `description`) pour
+  construire le prompt du portrait — c'est le champ réellement visuel.
+- `server.js` : `POST /api/worlds/:id/characters` et
+  `PATCH /api/worlds/:worldId/characters/:characterId` acceptent et
+  transmettent `appearance`.
+- Frontend (`public/app.js`) : nouveau champ apparence dans la fiche
+  personnage de l'éditeur de monde et dans le formulaire d'édition rapide à
+  la sélection de personnage — même libellé que celui déjà utilisé pour les
+  PNJ. Miroir client de `defaultPortraitPromptText` mis à jour pareil.
+- `providers/textProviders.js` (fournisseur mock) : les personnages
+  d'exemple (création de monde et génération à la volée) ont maintenant un
+  `appearance` réaliste, pour que le comportement de démo corresponde à ce
+  qu'un vrai fournisseur produira désormais.
+
+Vérifié de bout en bout (fournisseur mock) : `appearance` bien persisté par
+les quatre chemins (création de monde, ajout manuel, génération IA, édition
+PATCH) ; la ligne `Appearance:` apparaît bien dans le prompt de narration
+réel envoyé au modèle (vérifié par inspection directe du texte généré, pas
+seulement par la présence du champ en base) ; champ vérifié dans l'éditeur
+de monde via Playwright — pré-rempli depuis la création, modifiable,
+sauvegardé, survit à un rechargement de page. Aucune erreur JS introduite.
+
 ## 2026-09-23 — Sections repliables dans les réglages
 
 Réglages a accumulé assez de champs (fournisseur + clés texte, modèle

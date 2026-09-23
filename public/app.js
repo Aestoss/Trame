@@ -1052,7 +1052,7 @@ function readItemValueInputs(idPrefix) {
 // Mirrors gameEngine.js's defaultPortraitPromptText() -- see the matching
 // comment on defaultCoverPromptText() above.
 function defaultPortraitPromptText(character) {
-  return `Portrait of ${character.name}: ${character.description}`;
+  return `Portrait of ${character.name}: ${character.appearance || character.description}`;
 }
 
 function renderCharacterPortrait(card, character, worldId) {
@@ -1184,6 +1184,7 @@ function renderCharacterEditList(characters) {
       </div>
       <input type="text" id="${idPrefix}-name" value="${escapeHtml(c.name)}">
       <textarea id="${idPrefix}-desc" rows="2">${escapeHtml(c.description || '')}</textarea>
+      <textarea id="${idPrefix}-appearance" rows="2" placeholder="${t('npcAppearancePlaceholder')}">${escapeHtml(c.appearance || '')}</textarea>
       <div class="skill-inputs">${skillInputsHtml(c.skills, idPrefix)}</div>
       ${currentWorldTrackedItems.length ? `<p class="hint-inline">${t('startingItemValuesHint')}</p><div class="skill-inputs">${itemValueInputsHtml(c, idPrefix)}</div>` : ''}
       <div class="character-edit-actions">
@@ -1196,6 +1197,7 @@ function renderCharacterEditList(characters) {
       const body = {
         name: document.getElementById(`${idPrefix}-name`).value,
         description: document.getElementById(`${idPrefix}-desc`).value,
+        appearance: document.getElementById(`${idPrefix}-appearance`).value,
         skills: readSkillInputs(idPrefix),
         initialTrackedItemValues: readItemValueInputs(idPrefix)
       };
@@ -1457,6 +1459,7 @@ function showCharacterEditForm(card, c, worldId, saveId) {
   card.innerHTML = `
     <input type="text" id="${idPrefix}-name" value="${escapeHtml(c.name)}">
     <textarea id="${idPrefix}-desc" rows="2">${escapeHtml(c.description || '')}</textarea>
+    <textarea id="${idPrefix}-appearance" rows="2" placeholder="${t('npcAppearancePlaceholder')}">${escapeHtml(c.appearance || '')}</textarea>
     <div class="skill-inputs">${skillInputsHtml(c.skills, idPrefix)}</div>
     <div class="character-card-actions">
       <button class="primary-btn char-select-save-btn">${t('saveBtn')}</button>
@@ -1467,6 +1470,7 @@ function showCharacterEditForm(card, c, worldId, saveId) {
     const body = {
       name: document.getElementById(`${idPrefix}-name`).value,
       description: document.getElementById(`${idPrefix}-desc`).value,
+      appearance: document.getElementById(`${idPrefix}-appearance`).value,
       skills: readSkillInputs(idPrefix)
     };
     const res = await fetch(`${API}/worlds/${worldId}/characters/${c.id}`, {

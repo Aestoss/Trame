@@ -433,6 +433,7 @@ async function callMock({ system, user }) {
       text: JSON.stringify({
         name: 'Mira Fenwick',
         description: 'A quietly stubborn ex-sailor who talks to gulls more than people.',
+        appearance: 'A short, broad-shouldered woman in her forties, dark-skinned with close-cropped grey-flecked hair, a rope-burn scar across one palm, dressed in a patched wool sweater.',
         skills: { Intuition: 3, Nerve: 4, Charm: 2, Lore: 3 }
       }),
       usage: noUsage
@@ -465,12 +466,14 @@ async function callMock({ system, user }) {
           {
             name: 'Wren Ashby',
             description: 'A shipwrecked cartographer with a sharp eye for detail and a fear of deep water.',
+            appearance: 'A woman in her early thirties, of East Asian descent, lean and sun-weathered, dark hair cropped short and salt-stiff, a healing cut above one eyebrow, dressed in a torn oilcloth coat.',
             skills: { Intuition: 4, Nerve: 2, Charm: 3, Lore: 3 },
             initial_tracked_item_values: {}
           },
           {
             name: 'Corvin Blackwell',
             description: 'A disgraced glass-smith who insists the fog once spoke to him.',
+            appearance: 'A heavyset man in his fifties, pale and freckled, thinning red hair, burn scars across both forearms from decades at the furnace, wearing a soot-stained leather apron over plain clothes.',
             skills: { Intuition: 3, Nerve: 3, Charm: 2, Lore: 5 },
             initial_tracked_item_values: { 'Keeper Trust': 7 }
           }
