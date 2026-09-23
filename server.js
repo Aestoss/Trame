@@ -19,7 +19,7 @@ const {
   addTrackedItem, updateTrackedItem, deleteTrackedItem,
   addNpc, updateNpc, deleteNpc,
   createSave, getSave, selectCharacter, continueAfterVictory, deleteSave, purgeSaveImages,
-  playTurn, playTurnStreaming, rewindToTurn, regenerateTurn, regenerateTurnStreaming, getSettings,
+  playTurn, playTurnStreaming, playTimeSkipStreaming, rewindToTurn, regenerateTurn, regenerateTurnStreaming, getSettings,
   listAvailableOllamaModels, getOllamaStatus, listAvailableLocalSdModels
 } = require('./lib/gameEngine');
 const { getTotalCosts, getWorldCosts } = require('./lib/costTracker');
@@ -405,10 +405,17 @@ app.get('/api/saves/:id', (req, res) => {
     const itemDefs = db.get('trackedItemDefs').filter({ worldId: world.id }).value();
     const turns = db.get('turns').filter({ saveId: save.id }).sortBy('turnNumber').value()
       .map(t => publicTurn(t, { debug, itemDefs }));
+    // The "frise chronologique" (see the time-skip mechanic): every past
+    // skip in this save, for the pagination UI to badge the turn it
+    // happened on. Refreshed on every reload of the save, including right
+    // after a streamed turn completes (see app.js's refreshSave), so a
+    // skip appears the moment it's recorded.
+    const timelineEvents = db.get('timelineEvents').filter({ saveId: save.id }).sortBy('turnNumber').value();
     res.json({
       save: debug ? save : publicSave(save),
       world,
       turns,
+      timelineEvents,
       playableCharacters: worldPlayableCharacters(world.id)
     });
   } catch (e) {
@@ -499,6 +506,38 @@ app.post('/api/saves/:id/turn/stream', async (req, res) => {
     const turn = await playTurnStreaming(req.params.id, action.trim(), {
       authorMode: Boolean(authorMode),
       authorNote: authorNote && authorNote.trim() ? authorNote.trim() : undefined,
+      providerOverride,
+      onChapterChunk: (text) => send({ type: 'chunk', text })
+    });
+    const itemDefs = db.get('trackedItemDefs').filter({ worldId: save.worldId }).value();
+    send({ type: 'done', turn: publicTurn(turn, { debug: Boolean(debug), itemDefs }) });
+  } catch (e) {
+    console.error(e);
+    send({ type: 'error', message: e.message });
+  } finally {
+    res.end();
+  }
+});
+
+// The explicit, player-requested half of the time-skip mechanic (see
+// PACING & TIME SKIPS in lib/promptBuilder.js for the autonomous half,
+// which needs no separate route -- the Writer can already decide to skip
+// on any normal turn). Same newline-delimited JSON event protocol as
+// POST .../turn/stream. hint is optional free text for what the skip
+// should cover or lead to.
+app.post('/api/saves/:id/time-skip/stream', async (req, res) => {
+  const { hint, debug, providerOverride } = req.body;
+
+  res.writeHead(200, {
+    'content-type': 'application/x-ndjson; charset=utf-8',
+    'cache-control': 'no-cache',
+    'x-accel-buffering': 'no'
+  });
+  const send = (event) => res.write(JSON.stringify(event) + '\n');
+
+  try {
+    const save = getSave(req.params.id);
+    const turn = await playTimeSkipStreaming(req.params.id, hint, {
       providerOverride,
       onChapterChunk: (text) => send({ type: 'chunk', text })
     });

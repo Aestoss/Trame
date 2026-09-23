@@ -10,13 +10,16 @@ plutôt que par troncature, plan de migration en 5 étapes). Inspirée
 également d'[Infinite Worlds](https://infiniteworlds.app) (voir
 `docs/INFINITE_WORLDS_REFERENCE.md`).
 
-**Statut actuel : Milestone 2.** Le Retriever tourne : les faits pertinents
-pour un tour (pool général + faits par personnage) sont sélectionnés par
-similarité (embeddings + sqlite-vec) plutôt que par un plafond de récence.
-L'Archivist tourne en tâche de fond (hors du chemin critique du joueur), et
-l'horloge narrative (`storyClock`) est alimentée à chaque tour. Proofreader
-et Mastermind restent à implémenter (voir `roles/`, chacun documente son
-propre jalon). Pas encore déployé.
+**Statut actuel : Milestone 2 + mécanique d'ellipse temporelle.** Le
+Retriever tourne : les faits pertinents pour un tour (pool général + faits
+par personnage) sont sélectionnés par similarité (embeddings + sqlite-vec)
+plutôt que par un plafond de récence. L'Archivist tourne en tâche de fond
+(hors du chemin critique du joueur), et l'horloge narrative (`storyClock`)
+est lue et alimentée à chaque tour. En plus du plan de migration : une
+mécanique d'ellipse temporelle (autonome ou déclenchée par le joueur via
+le bouton ⏩) avec sa propre « frise chronologique » (`timelineEvents`) —
+voir CHANGELOG.md. Proofreader et Mastermind restent à implémenter (voir
+`roles/`, chacun documente son propre jalon). Pas encore déployé.
 
 ## Fonctionnalités
 

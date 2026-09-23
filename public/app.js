@@ -33,6 +33,7 @@ const UI = {
     backGeneric: '‹ Retour',
     authorModeBtn: 'Mode auteur (révéler les informations cachées)',
     editWorldBtn: 'Modifier le monde',
+    timeSkipBtn: 'Passer du temps',
     purgeImagesBtn: 'Purger les images de cette partie',
     purgeImagesConfirm: 'Supprimer toutes les images déjà générées dans cette partie ? Le texte des tours est conservé, seules les images sont effacées.',
     purgeImagesStatus: 'Images supprimées.',
@@ -52,6 +53,12 @@ const UI = {
     regenerateLabel: 'Régénérer',
     regeneratePastWarning: n => `⚠️ Régénérer ce tour supprimera aussi les ${n} tour${n > 1 ? 's' : ''} suivant${n > 1 ? 's' : ''}.`,
     regeneratePastConfirm: 'Régénérer ce tour supprimera définitivement tous les tours suivants. Continuer ?',
+    timeSkipHintLabel: 'Vers quoi veux-tu avancer ?',
+    timeSkipHintHint: '(optionnel — "jusqu\'à mon arrivée à la capitale", "jusqu\'à ce que je sois guéri"...)',
+    timeSkipConfirmBtn: '⏩ Passer du temps',
+    timeSkipThinking: 'Le temps passe...',
+    timeSkipEcho: hint => hint ? `⏩ Passage du temps : ${hint}` : '⏩ Passage du temps',
+    timeSkipBadge: elapsed => `⏩ ${elapsed} passé`,
     cancelBtn: 'Annuler',
     saveBtn: 'Enregistrer',
     sendBtn: 'Envoyer',
@@ -230,6 +237,7 @@ const UI = {
     backGeneric: '‹ Back',
     authorModeBtn: 'Author mode (reveal hidden information)',
     editWorldBtn: 'Edit the world',
+    timeSkipBtn: 'Skip ahead in time',
     purgeImagesBtn: 'Purge this save\'s images',
     purgeImagesConfirm: 'Delete every image already generated in this save? Turn text is kept — only images are cleared.',
     purgeImagesStatus: 'Images deleted.',
@@ -249,6 +257,12 @@ const UI = {
     regenerateLabel: 'Regenerate',
     regeneratePastWarning: n => `⚠️ Regenerating this turn will also delete the ${n} turn${n > 1 ? 's' : ''} after it.`,
     regeneratePastConfirm: 'Regenerating this turn will permanently delete every turn after it. Continue?',
+    timeSkipHintLabel: 'What should the skip lead to?',
+    timeSkipHintHint: '(optional — "until I reach the capital", "until I\'m healed"...)',
+    timeSkipConfirmBtn: '⏩ Skip ahead',
+    timeSkipThinking: 'Time passes...',
+    timeSkipEcho: hint => hint ? `⏩ Time skip: ${hint}` : '⏩ Time skip',
+    timeSkipBadge: elapsed => `⏩ ${elapsed} passed`,
     cancelBtn: 'Cancel',
     saveBtn: 'Save',
     sendBtn: 'Send',
@@ -438,6 +452,7 @@ let currentWorldSkills = []; // world.skills, needed to render character skill i
 let currentSave = null;     // last-fetched save object (gameOver, activeCharacterId, secretInfo if debug)
 let currentTurns = [];      // all turns of the open save, oldest first — one "page" each
 let currentPageIndex = 0;   // which turn is currently displayed
+let currentTimelineEvents = []; // past time skips (see gameEngine.js's timelineEvents), keyed by turnNumber for the badge in renderPage
 let debugModeOn = false;    // "mode auteur": reveals hidden info (secret info box, outcome badges) -- talking
                              // to the narrator is a separate, always-visible field (#instructionInput below)
 let previousView = 'home';
@@ -1507,6 +1522,7 @@ function applySaveData(data, jumpToLatest) {
   currentWorldId = data.world.id;
   currentSave = data.save;
   currentTurns = data.turns;
+  currentTimelineEvents = data.timelineEvents || [];
 
   showView('story');
   document.getElementById('storyTitle').textContent = data.world.title;
@@ -1527,6 +1543,7 @@ function applySaveData(data, jumpToLatest) {
   }
   document.getElementById('authorModeBtn').classList.toggle('active', debugModeOn);
   document.getElementById('regeneratePopover').classList.add('hidden');
+  document.getElementById('timeSkipPopover').classList.add('hidden');
 
   // Worlds with a "background" popup generate their real first turn on
   // demand (world.firstAction) once a character is chosen — until that
@@ -1660,7 +1677,13 @@ function renderPage() {
   const outcomeLabel = debugModeOn ? OUTCOME_LABELS[turn.outcome] : null;
   const outcomeHtml = outcomeLabel ? ` <span class="outcome-badge outcome-${turn.outcome}">${outcomeLabel}</span>` : '';
   const actionLine = turn.turnNumber === 0 ? '' : `<div class="player-action">→ ${escapeHtml(turn.playerAction)}${outcomeHtml}</div>`;
-  content.innerHTML = `<div class="chapter">${actionLine}${formatChapterText(turn.chapterText)}</div>`;
+  // The "frise chronologique" badge (see the time-skip mechanic): shown on
+  // whichever turn a skip actually landed on, autonomous or player-requested
+  // alike -- both paths write the same timelineEvents row (see
+  // gameEngine.js's recordTimelineEvent).
+  const timelineEvent = currentTimelineEvents.find(e => e.turnNumber === turn.turnNumber);
+  const timeSkipBadge = timelineEvent ? `<div class="time-skip-badge">${escapeHtml(t('timeSkipBadge')(timelineEvent.elapsedDescription))}</div>` : '';
+  content.innerHTML = `<div class="chapter">${actionLine}${timeSkipBadge}${formatChapterText(turn.chapterText)}</div>`;
 
   const gameOver = isLatest ? currentSave.gameOver : null;
   renderGameOver(gameOver);
@@ -1872,6 +1895,91 @@ async function playAction({ actionText, instructionText }) {
   }
 }
 
+// The explicit half of the time-skip mechanic (see timeSkipPopover in
+// index.html and PACING & TIME SKIPS in lib/promptBuilder.js for the
+// autonomous half, which needs no client-side code at all -- the Writer
+// can already decide to skip on its own within a normal playAction turn).
+// Mirrors playAction's streaming logic closely -- same echo/pending/stream
+// dance, same recovery path on failure -- against the dedicated
+// time-skip/stream route instead.
+async function playTimeSkip(hint) {
+  const hintEl = document.getElementById('timeSkipHintInput');
+  hintEl.value = '';
+  resizeTextarea(hintEl);
+  document.getElementById('timeSkipPopover').classList.add('hidden');
+
+  const content = document.getElementById('pageContent');
+  const echoedAction = document.createElement('div');
+  echoedAction.className = 'player-action';
+  echoedAction.textContent = t('timeSkipEcho')(hint);
+  content.appendChild(echoedAction);
+  const pending = document.createElement('p');
+  pending.className = 'loading';
+  pending.textContent = t('timeSkipThinking');
+  content.appendChild(pending);
+  document.getElementById('suggestedActions').innerHTML = '';
+
+  const providerOverride = resolveProviderOverride();
+  const updatedAtBefore = currentSave.updatedAt;
+  let streaming = null;
+  try {
+    const res = await fetch(`${API}/saves/${currentSaveId}/time-skip/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ hint, debug: debugModeOn, ...(providerOverride ? { providerOverride } : {}) })
+    });
+    if (!res.ok || !res.body) throw new Error(t('illegibleResponse')(res.status));
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let streamedText = '';
+    let doneEvent = null;
+    let errorMessage = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let newlineIndex;
+      while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+        const line = buffer.slice(0, newlineIndex).trim();
+        buffer = buffer.slice(newlineIndex + 1);
+        if (!line) continue;
+        let event;
+        try { event = JSON.parse(line); } catch (e) { continue; }
+        if (event.type === 'chunk') {
+          if (!streaming) {
+            pending.remove();
+            streaming = document.createElement('p');
+            streaming.className = 'chapter-streaming';
+            content.appendChild(streaming);
+          }
+          streamedText += event.text;
+          streaming.textContent = streamedText;
+        } else if (event.type === 'done') {
+          doneEvent = event;
+        } else if (event.type === 'error') {
+          errorMessage = event.message;
+        }
+      }
+    }
+
+    if (errorMessage) throw new Error(errorMessage);
+    if (!doneEvent) throw new Error(t('illegibleResponse')(res.status));
+    await refreshSave(true);
+  } catch (e) {
+    if (!(await attemptRecovery(updatedAtBefore))) {
+      echoedAction.remove();
+      pending.remove();
+      if (streaming) streaming.remove();
+      hintEl.value = hint;
+      resizeTextarea(hintEl);
+      alert(t('errorPrefix') + e.message + t('retryHint'));
+    }
+  }
+}
+
 document.getElementById('actionForm').onsubmit = (e) => {
   e.preventDefault();
   const actionText = document.getElementById('actionInput').value.trim();
@@ -1883,6 +1991,7 @@ autoGrowTextarea(document.getElementById('actionInput'), () => document.getEleme
 autoGrowTextarea(document.getElementById('instructionInput'), () => document.getElementById('actionForm').requestSubmit());
 autoGrowTextarea(document.getElementById('regenerateActionInput'));
 autoGrowTextarea(document.getElementById('regenerateNoteInput'));
+autoGrowTextarea(document.getElementById('timeSkipHintInput'));
 
 document.getElementById('prevPageBtn').onclick = () => {
   if (currentPageIndex > 0) { currentPageIndex--; renderPage(); }
@@ -2028,6 +2137,18 @@ document.getElementById('backBtn').onclick = () => {
 };
 
 document.getElementById('editWorldBtn').onclick = () => openWorldEditor(currentWorldId);
+
+document.getElementById('timeSkipBtn').onclick = () => {
+  document.getElementById('timeSkipHintInput').value = '';
+  document.getElementById('timeSkipPopover').classList.remove('hidden');
+};
+document.getElementById('timeSkipCancelBtn').onclick = () => {
+  document.getElementById('timeSkipPopover').classList.add('hidden');
+};
+document.getElementById('timeSkipConfirmBtn').onclick = () => {
+  const hint = document.getElementById('timeSkipHintInput').value.trim();
+  playTimeSkip(hint);
+};
 
 document.getElementById('purgeImagesBtn').onclick = async () => {
   if (!confirm(t('purgeImagesConfirm'))) return;

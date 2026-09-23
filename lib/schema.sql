@@ -102,17 +102,34 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 
 -- New per the V2 design doc's Data model section -- one row per save,
--- populated every turn starting Milestone 1 (nothing reads it until
--- Milestone 3's Proofreader). `id` always equals the save's id (there's
--- inherently at most one row per save) so this table fits the same
--- id-keyed CollectionRef machinery as every other table in lib/db.js,
--- rather than needing its own special case there.
+-- populated every turn since Milestone 1 and, since the time-skip
+-- mechanic, read back into every prompt too (see gameEngine.js's
+-- gatherTurnContext and promptBuilder.js's STORY CLOCK block). `id` always
+-- equals the save's id (there's inherently at most one row per save) so
+-- this table fits the same id-keyed CollectionRef machinery as every other
+-- table in lib/db.js, rather than needing its own special case there.
 CREATE TABLE IF NOT EXISTS storyClock (
   id TEXT PRIMARY KEY,
   saveId TEXT NOT NULL,
   data TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_storyClock_saveId ON storyClock(saveId);
+
+-- The time-skip mechanic's "frise chronologique": one row per time skip
+-- (never per ordinary turn), append-only history of how the story reached
+-- its current point in story-time -- storyClock above only ever holds the
+-- single current value, this is what lets the Writer stay consistent
+-- across several skips in a long story instead of contradicting an earlier
+-- one. Small and rare enough (skips, not turns) that including every row
+-- in full on every prompt costs nothing -- no cap needed, unlike
+-- memoryFacts.
+CREATE TABLE IF NOT EXISTS timelineEvents (
+  id TEXT PRIMARY KEY,
+  saveId TEXT NOT NULL,
+  turnNumber INTEGER NOT NULL,
+  data TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_timelineEvents_saveId ON timelineEvents(saveId);
 
 -- New per the V2 design doc -- versioned, one active row per save + history,
 -- unpopulated until Milestone 3 (the Mastermind).

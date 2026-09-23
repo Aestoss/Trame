@@ -1,5 +1,62 @@
 # Changelog
 
+## 2026-09-23 — Mécanique d'ellipse temporelle (avant le Milestone 3)
+
+Ajouté hors plan de migration, à la demande explicite : l'IA a souvent du
+mal à savoir quand *ne pas* raconter scène par scène (un trajet, une
+convalescence, un apprentissage) et reste bloquée sur des moments à faible
+enjeu au lieu d'avancer. Deux façons de déclencher une ellipse, comme
+convenu :
+
+- **Autonome** : le Writer peut désormais décider, sur n'importe quel tour
+  normal, de compresser une période plutôt que de la raconter en temps réel
+  — voir la section « PACING & TIME SKIPS » ajoutée à
+  `buildNarrationMasterPrompt`/`buildMasterPrompt`. Aucune UI requise :
+  c'est une extension du schéma de sortie existant (`time_skip`), au même
+  titre que `game_over`.
+- **Explicite** : nouveau bouton ⏩ à côté du formulaire d'action, qui ouvre
+  un petit champ pour préciser vers quoi avancer (optionnel). Passe par un
+  prompt de narration dédié (`buildTimeSkipPrompt`), volontairement
+  différent de celui d'un tour normal — comme pressenti, la fenêtre de
+  contexte compte autant que les instructions : le bloc RECENT SCENES
+  (5 derniers tours, verbeux) est justement ce qui retient le modèle dans
+  la scène immédiate, donc ce chemin le remplace par une seule ancre courte
+  (« CURRENT SITUATION », le dernier chapitre uniquement) plutôt que
+  d'empiler des instructions de compression sur un contexte qui pousse dans
+  l'autre sens.
+- **`timelineEvents`** (nouvelle table) : la « frise chronologique »
+  demandée — un enregistrement par ellipse (jamais par tour normal),
+  jamais purgé (sauf rewind), toujours inclus en entier dans chaque prompt
+  suivant sous forme de bloc STORY TIMELINE. C'est ce qui permet à une
+  histoire avec plusieurs ellipses de rester cohérente avec elle-même
+  plutôt que de contredire une ellipse précédente.
+- **`storyClock` n'est plus write-only** : alimenté depuis le Milestone 1
+  mais jamais relu jusqu'ici — le Writer voit maintenant le point actuel
+  dans le temps de l'histoire (bloc STORY CLOCK) avant de décider si une
+  ellipse a du sens.
+- Petit badge « ⏩ X passé » affiché sur la page du tour concerné, côté
+  joueur comme auteur, alimenté par `GET /api/saves/:id` (le même appel
+  déjà refait après chaque tour streamé).
+
+Les deux chemins réutilisent le même appel d'état (`buildStatePrompt`)
+sans modification pour la mise à jour des objets suivis/secretInfo — seule
+la moitié narration diffère, exactement là où le cadrage doit changer.
+
+Vérifié de bout en bout (fournisseur mock) : ellipse explicite via
+l'endpoint streamé, écriture correcte de `timelineEvents`/`storyClock`,
+le bloc STORY TIMELINE apparaît bien dans le tour suivant, nettoyage
+correct au rewind (l'entrée de l'ellipse disparaît, `lastReferencedTurn`
+est ramené au bon tour) et à la suppression en cascade d'un monde/d'une
+sauvegarde. Aucune erreur sur l'ensemble de la session de test.
+
+Limite connue : régénérer un tour qui était une ellipse le repasse par le
+chemin de tour normal (`regenerateTurn` rejoue `playerAction` via
+`playTurn`/`playTurnStreaming`, pas `playTimeSkipStreaming`) — l'identité
+« ceci était une ellipse » n'est pas préservée à la régénération. Le Writer
+peut toujours redécider d'une ellipse de lui-même sur ce tour rejoué (même
+schéma de sortie), mais ce n'est plus garanti comme au premier passage.
+Pas bloquant pour ce livrable, à revisiter si ça gêne en pratique.
+
 ## 2026-09-22 — Milestone 2 : le Retriever, mémoire par similarité plutôt que par récence
 
 Livrable central du doc de conception : remplacer le plafond par récence

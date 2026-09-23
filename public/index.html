@@ -93,6 +93,7 @@
     <div class="turn-icon-row">
       <button id="authorModeBtn" class="icon-btn" data-i18n-title="authorModeBtn">🔍</button>
       <button id="editWorldBtn" class="icon-btn" data-i18n-title="editWorldBtn">✏️</button>
+      <button id="timeSkipBtn" class="icon-btn" data-i18n-title="timeSkipBtn">⏩</button>
       <button id="purgeImagesBtn" class="icon-btn" data-i18n-title="purgeImagesBtn">🗑️🖼️</button>
     </div>
     <p id="purgeImagesStatus" class="hint hidden"></p>
@@ -113,6 +114,20 @@
       <div class="regenerate-popover-actions">
         <button id="regenerateConfirmBtn" class="primary-btn" data-i18n="regenerateConfirmBtn"></button>
         <button id="regenerateCancelBtn" class="text-btn" data-i18n="cancelBtn"></button>
+      </div>
+    </div>
+
+    <!-- The explicit half of the time-skip mechanic (see PACING & TIME SKIPS
+         in lib/promptBuilder.js for the autonomous half, which needs no UI
+         -- the Writer can already decide to skip on its own). Same
+         always-reachable positioning reasoning as regeneratePopover above. -->
+    <div id="timeSkipPopover" class="regenerate-popover hidden">
+      <label><span data-i18n="timeSkipHintLabel"></span> <span class="hint-inline" data-i18n="timeSkipHintHint"></span>
+        <textarea rows="1" id="timeSkipHintInput"></textarea>
+      </label>
+      <div class="regenerate-popover-actions">
+        <button id="timeSkipConfirmBtn" class="primary-btn" data-i18n="timeSkipConfirmBtn"></button>
+        <button id="timeSkipCancelBtn" class="text-btn" data-i18n="cancelBtn"></button>
       </div>
     </div>
 

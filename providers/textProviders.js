@@ -526,9 +526,25 @@ async function callMock({ system, user }) {
   // by their distinctive system-prompt markers so the mock produces the
   // matching shape instead of falling into the single-call hooks below,
   // which would return the old, incompatible shape.
-  const isNarration = /===CHAPTER===/.test(system || '');
+  // Checked before isNarration: both prompts share the same ===CHAPTER===
+  // wire format (see buildTimeSkipMasterPrompt's own comment), so the
+  // time-skip prompt needs its own, more specific marker checked first.
+  const isTimeSkip = /explicitly asked to skip ahead in time/.test(system || '');
+  const isNarration = !isTimeSkip && /===CHAPTER===/.test(system || '');
   const isState = /You maintain the hidden bookkeeping/.test(system || '');
   const isArchivist = /You extract structured facts from a single chapter/.test(system || '');
+
+  if (isTimeSkip) {
+    const hintMatch = user.match(/PLAYER'S REQUEST FOR THIS SKIP: (.*)/);
+    const hint = (hintMatch && hintMatch[1]) || '';
+    return {
+      usage: noUsage,
+      text: '===CHAPTER===\nThe days blurred together after that. ' +
+        (hint ? `Everything moved toward one thing: ${hint}. ` : 'The fog outside barely seemed to shift, and neither did much else. ') +
+        'When it finally settled, you found yourself somewhere new, the weight of that stretch of time still on your shoulders.\n===META===\n' +
+        JSON.stringify({ outcome: 'n/a', skill_used: null, game_over: null, suggested_actions: ['Take stock of what changed', 'Look around', 'Move on'] })
+    };
+  }
 
   if (isNarration) {
     if (/\bwin\b/i.test(action)) {
@@ -549,6 +565,10 @@ async function callMock({ system, user }) {
 
   if (isState) {
     const tookLantern = /take the lantern/i.test(user);
+    // Detects the mock time-skip chapter's own marker phrase (see isTimeSkip
+    // above) so the mock provider exercises time_skip end to end too,
+    // instead of it only ever coming back null in local testing.
+    const wasTimeSkip = /days blurred together/i.test(user);
     return {
       usage: noUsage,
       text: JSON.stringify({
@@ -562,7 +582,10 @@ async function callMock({ system, user }) {
         // Exercises a non-null value on the lantern turn specifically, so the
         // mock provider would catch a regression in how gameEngine.js
         // upserts storyClock, the same reasoning as new_facts below.
-        story_clock: tookLantern ? { current_date: null, elapsed_description: 'a moment later' } : { current_date: null, elapsed_description: null },
+        story_clock: wasTimeSkip
+          ? { current_date: null, elapsed_description: 'several days' }
+          : tookLantern ? { current_date: null, elapsed_description: 'a moment later' } : { current_date: null, elapsed_description: null },
+        time_skip: wasTimeSkip ? { elapsed_description: 'several days', summary: 'Several uneventful days passed while things quietly moved into place.' } : null,
         image_prompt: 'A foggy lighthouse at dusk, glass architecture, a lone figure on stone steps'
       })
     };

@@ -446,6 +446,16 @@ input[type="range"] { width: 100%; margin: 6px 0 4px; accent-color: var(--accent
   margin-bottom: 8px;
   font-style: normal;
 }
+/* The time-skip mechanic's "frise chronologique" badge (see renderPage in
+   app.js) -- distinct from .player-action so a skip reads as a structural
+   marker (like the outcome badge) rather than as another line of dialogue. */
+.time-skip-badge {
+  font-family: var(--sans);
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+  font-style: italic;
+}
 .chapter p { margin: 0 0 14px; }
 .chapter p:last-child { margin-bottom: 0; }
 
