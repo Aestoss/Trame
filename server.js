@@ -672,7 +672,8 @@ app.get('/api/settings', (req, res) => {
   // Never send raw keys back to the client — only whether each is set.
   const safe = {
     ...settings,
-    apiKeys: Object.fromEntries(Object.entries(settings.apiKeys).map(([k, v]) => [k, Boolean(v)]))
+    apiKeys: Object.fromEntries(Object.entries(settings.apiKeys).map(([k, v]) => [k, Boolean(v)])),
+    backgroundModel: { apiKey: Boolean(settings.backgroundModel && settings.backgroundModel.apiKey) }
   };
   res.json(safe);
 });
@@ -682,7 +683,7 @@ app.post('/api/settings', (req, res) => {
   const {
     textProvider, textModel, ollamaBaseUrl, fallbackProvider, fallbackModel,
     language, chapterLength, imageProvider, imageModel, imagesEnabled, localImageBaseUrl,
-    embeddingProvider, apiKeys
+    embeddingProvider, apiKeys, backgroundModel
   } = req.body;
   const next = {
     textProvider: textProvider ?? current.textProvider,
@@ -704,7 +705,10 @@ app.post('/api/settings', (req, res) => {
     // See providers/embeddingProviders.js (the Retriever role, Milestone 2)
     // -- 'gemini' reuses apiKeys.gemini below, no separate key needed.
     embeddingProvider: embeddingProvider ?? current.embeddingProvider,
-    apiKeys: { ...current.apiKeys, ...(apiKeys || {}) }
+    apiKeys: { ...current.apiKeys, ...(apiKeys || {}) },
+    // Locked-model background roles (Archivist/Proofreader/Mastermind) --
+    // see lib/backgroundModel.js. Only field here is the key itself.
+    backgroundModel: { ...current.backgroundModel, ...(backgroundModel || {}) }
   };
   db.set('settings', next).write();
   res.json({ ok: true });
