@@ -45,20 +45,47 @@ async function embedQuery(text, settings) {
 // character is allowed to know. viewerCharacter is ignored when this is
 // true.
 //
+// forwardEmbedding (feedback item #1): the Mastermind's active plan's own
+// stored embedding (see roles/mastermind.js's reviewPlan), searched
+// alongside the backward-looking queryText embedding and merged into the
+// same capped pool. Without this, retrieval only ever looks backward at
+// "what just happened" -- a fact planted many turns ago for a payoff the
+// plan is quietly building toward has no reason to resemble the current
+// scene's wording, and would never surface on its own this way. Optional:
+// a save with no active plan yet (or a failed query embedding) just runs
+// whichever of the two queries it still has.
+//
 // Returns { memoryFacts, factsByCharacter } in exactly the shapes
 // lib/promptBuilder.js's buildTurnContextBlocks already expects (mirroring
 // what gatherTurnContext used to build itself via a recency slice):
 // memoryFacts as full fact rows (only .fact is read downstream, but the
 // whole row is kept in case a future milestone wants more of it), and
 // factsByCharacter[name] as plain fact strings.
-async function retrieveRelevantFacts({ saveId, queryText, characterNames, viewerCharacter, omniscient, limit, settings }) {
+async function retrieveRelevantFacts({ saveId, queryText, forwardEmbedding, characterNames, viewerCharacter, omniscient, limit, settings }) {
   const embedding = await embedQuery(queryText, settings);
-  if (!embedding) return { memoryFacts: [], factsByCharacter: {} };
+  if (!embedding && !forwardEmbedding) return { memoryFacts: [], factsByCharacter: {} };
 
-  const memoryFacts = db.searchMemoryFactsByEmbedding({ saveId, embedding, k: limit, character: null, viewerCharacter, omniscient });
+  // Backward and forward queries each contribute up to `limit` candidates,
+  // merged and deduped by id, then capped to `limit` once -- adding the
+  // forward query widens the pool that gets ranked down to one bounded
+  // result, it never adds a second uncapped bucket on top of the first.
+  function mergedSearch(character) {
+    const backward = embedding ? db.searchMemoryFactsByEmbedding({ saveId, embedding, k: limit, character, viewerCharacter, omniscient }) : [];
+    const forward = forwardEmbedding ? db.searchMemoryFactsByEmbedding({ saveId, embedding: forwardEmbedding, k: limit, character, viewerCharacter, omniscient }) : [];
+    const seen = new Set();
+    const merged = [];
+    for (const fact of [...backward, ...forward]) {
+      if (seen.has(fact.id)) continue;
+      seen.add(fact.id);
+      merged.push(fact);
+    }
+    return merged.slice(0, limit);
+  }
+
+  const memoryFacts = mergedSearch(null);
   const factsByCharacter = {};
   for (const name of characterNames || []) {
-    const rows = db.searchMemoryFactsByEmbedding({ saveId, embedding, k: limit, character: name, viewerCharacter, omniscient });
+    const rows = mergedSearch(name);
     if (rows.length) factsByCharacter[name] = rows.map(r => r.fact);
   }
   return { memoryFacts, factsByCharacter };

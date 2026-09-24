@@ -426,8 +426,12 @@ app.get('/api/saves/:id', (req, res) => {
     // The Mastermind's hidden plan (see roles/mastermind.js, Milestone 3) was
     // never surfaced anywhere in the app before -- same author-only treatment
     // as proofreaderFlags/secretInfo above, since it's meant to stay hidden
-    // from the player but should still be checkable in "mode auteur".
-    const mastermindPlan = debug ? (getActiveMastermindPlan(save.id) || null) : null;
+    // from the player but should still be checkable in "mode auteur". Strips
+    // `embedding` (a 768-float array, feedback item #1's forward-query
+    // vector) before it reaches the client -- useless there and needlessly
+    // bloats the response.
+    const rawMastermindPlan = debug ? getActiveMastermindPlan(save.id) : null;
+    const mastermindPlan = rawMastermindPlan ? (({ embedding, ...rest }) => rest)(rawMastermindPlan) : null;
     res.json({
       save: debug ? save : publicSave(save),
       world,

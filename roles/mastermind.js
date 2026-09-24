@@ -26,6 +26,7 @@ const { generateText } = require('../providers/textProviders');
 const { recordCost } = require('../lib/costTracker');
 const { buildMastermindPrompt } = require('../lib/promptBuilder');
 const { getBackgroundModelConfig } = require('../lib/backgroundModel');
+const { embedFact } = require('../lib/embedFact');
 
 // previousPlan: the current active mastermindPlans row, or null on the
 // first call for a save. Fired without being awaited (see
@@ -72,12 +73,23 @@ async function reviewPlan({ worldId, saveId, turnNumber, world, previousPlan, re
     db.get('mastermindPlans').find({ id: previousPlan.id }).assign({ status: 'superseded', supersededBy: newId }).write();
   }
   const beats = Array.isArray(plan.beats) ? plan.beats.filter(b => typeof b === 'string' && b.trim()).map(b => b.trim()) : [];
+  const summary = typeof plan.summary === 'string' ? plan.summary.trim() : '';
+  // Feedback item #1: the plan needs to steer retrieval, not just the
+  // Writer's prompt (see gameEngine.js's gatherTurnContext "forward query" --
+  // a fact planted turns ago for a payoff the plan is building toward has no
+  // reason to resemble "what just happened", so a plain recency/backward
+  // query alone would never surface it). Embedded once here, when the plan
+  // is (re)written, and reused for every turn until the next revision --
+  // same one-embedding-per-version economy as memoryFacts, not a fresh
+  // embedding call every single turn just to re-ask the same question.
+  const embedding = await embedFact(`${summary} ${beats.join(' ')}`.trim(), settings, `mastermind plan, save ${saveId}, turn ${turnNumber}`);
   db.get('mastermindPlans').push({
     id: newId,
     saveId,
     turnNumber,
-    summary: typeof plan.summary === 'string' ? plan.summary.trim() : '',
+    summary,
     beats,
+    embedding,
     status: 'active',
     supersededBy: null,
     createdAt: new Date().toISOString()

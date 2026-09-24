@@ -1,5 +1,46 @@
 # Changelog
 
+## 2026-09-24 — Mastermind à chaque tour + requête "prospective" pour la mémoire
+
+Feedback #1, dernier point resté ouvert du lot précédent (voir l'entrée
+juste en dessous) : le Mastermind était censé tourner à chaque tour et
+alimenter le Récupérateur, une refonte agréée dans une conversation
+antérieure mais jamais construite. Portée de ce lot, confirmée avec
+l'utilisateur (chaque tour, async) :
+
+- **Cadence** (`lib/gameEngine.js`) : `fireMastermind` tournait tous les 5
+  tours (`MASTERMIND_EVERY`) ; il tourne maintenant à chaque tour, toujours
+  en arrière-plan (fire-and-forget, jamais sur le chemin critique du
+  Writer). `buildMastermindMasterPrompt` (`lib/promptBuilder.js`) précise
+  qu'il est maintenant interrogé à chaque tour et que la bonne réponse, la
+  plupart du temps, est de garder le plan quasiment tel quel — pour éviter
+  qu'il ne change de direction à chaque scène.
+- **Requête "prospective" pour la mémoire** (`roles/mastermind.js`,
+  `roles/retriever.js`, `lib/gameEngine.js`) : jusqu'ici la recherche par
+  similarité ne regardait que vers l'arrière (l'action du joueur + les
+  dernières scènes) — un fait posé il y a 40 tours pour un futur
+  rebondissement du Mastermind n'avait aucune raison de ressembler à "ce qui
+  vient de se passer", donc ne remontait jamais. Le Mastermind calcule
+  maintenant un embedding de son plan (résumé + points, une fois par
+  révision, pas à chaque tour — même économie que les faits de
+  l'Archiviste) et le stocke sur sa ligne `mastermindPlans`.
+  `gatherTurnContext` lance désormais deux recherches par tour — l'ancienne
+  (rétrospective) et une nouvelle (prospective, via l'embedding du plan) —
+  fusionnées et dédupliquées dans le même pool plafonné, plutôt que d'ouvrir
+  un second panier non plafonné.
+- **Correctif découvert en testant** (`rewindToTurn`) : un plan actif
+  généré après le point de retour en arrière était bien supprimé, mais le
+  plan resté "superseded" juste avant n'était jamais réactivé — invisible
+  avec l'ancienne cadence (tous les 5 tours), quasi garanti de se produire
+  à chaque retour en arrière maintenant que le Mastermind tourne à chaque
+  tour. Réactive maintenant le plan restant le plus récent quand aucun
+  n'est actif après un rewind.
+- Volontairement laissé de côté cette fois (portée plus large, données
+  d'une partie en cours en jeu) : faire absorber `secret_info` par le
+  Mastermind et ajouter un panneau d'édition directe pour l'auteur — une
+  extension plus ambitieuse de la même conversation, à confirmer séparément
+  avant d'y toucher.
+
 ## 2026-09-24 — Retours de partie : temps/lieu visibles, plan du Mastermind consultable, objets suivis repliables, second champ pour l'ellipse
 
 Suite à une partie réelle en production, quatre lacunes remontées par
