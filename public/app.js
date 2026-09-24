@@ -200,6 +200,8 @@ const UI = {
     deleteCharacterBtn: 'Supprimer',
     deleteCharacterConfirm: name => `Supprimer ${name} ?`,
     startAdventureBtn: '▶ Commencer une aventure',
+    saveWorldEditAllBtn: '💾 Enregistrer',
+    saveAndPlayBtn: '💾▶ Enregistrer et jouer',
     deleteWorldBtn: '🗑️ Supprimer ce monde',
     settingsHeading: 'Réglages',
     settingsTextHeading: 'Texte',
@@ -428,6 +430,8 @@ const UI = {
     deleteCharacterBtn: 'Delete',
     deleteCharacterConfirm: name => `Delete ${name}?`,
     startAdventureBtn: '▶ Start an adventure',
+    saveWorldEditAllBtn: '💾 Save',
+    saveAndPlayBtn: '💾▶ Save and play',
     deleteWorldBtn: '🗑️ Delete this world',
     settingsHeading: 'Settings',
     settingsTextHeading: 'Text',
@@ -941,7 +945,13 @@ document.getElementById('closeWorldEditBtn').onclick = () => {
   if (!currentSaveId) loadHome();
 };
 
-document.getElementById('saveWorldEditBtn').onclick = async () => {
+// Saves only the top "info" group's own fields (title, description,
+// background, skills, victory/defeat...) -- world.playableCharacters,
+// trackedItemDefs and worldNpcs each live in their own table with their
+// own PATCH route, so this alone was never "save everything on this page"
+// despite being the page's original, most prominent Save button. See
+// saveWholeWorldEditor below, which now covers all of it in one action.
+async function saveWorldFields() {
   const body = {
     title: document.getElementById('worldTitleInput').value.trim() || undefined,
     description: document.getElementById('worldDescriptionInput').value,
@@ -973,15 +983,37 @@ document.getElementById('saveWorldEditBtn').onclick = async () => {
     body: JSON.stringify(body)
   });
   const data = await res.json();
-  const status = document.getElementById('worldEditStatus');
-  if (!res.ok) {
-    status.textContent = t('errorPrefix') + data.error;
-    return;
-  }
+  if (!res.ok) throw new Error(data.error);
   currentWorldSkills = data.world.skills || [];
   document.getElementById('worldEditTitle').textContent = data.world.title;
   document.getElementById('worldVersionInfo').textContent = t('worldVersionInfo')(data.world.version);
-  status.textContent = t('savedStatus');
+  return data.world;
+}
+
+// Each character/tracked-item/NPC card (see renderCharacterEditList,
+// renderTrackedItemsEditor, renderNpcEditor below) attaches its own save
+// logic to its own card element as `card._save` -- this is what let a
+// change made in one of those cards get silently lost before: the page's
+// only "Save" button (saveWorldFields above) never touched them, and each
+// card's own small "Save" button was easy to miss or forget, especially
+// with everything now collapsed into sections. This walks every currently
+// rendered card and saves it alongside the world's own fields, in
+// parallel, so one button really does save the whole page.
+async function saveWholeWorldEditor() {
+  const cardSaves = Array.from(document.querySelectorAll(
+    '#view-world-edit .character-edit-card, #view-world-edit .tracked-item-edit-card, #view-world-edit .npc-edit-card'
+  )).map(card => card._save && card._save());
+  await Promise.all([saveWorldFields(), ...cardSaves]);
+}
+
+document.getElementById('saveWorldEditAllBtn').onclick = async () => {
+  const status = document.getElementById('worldEditStatus');
+  try {
+    await saveWholeWorldEditor();
+    status.textContent = t('savedStatus');
+  } catch (e) {
+    status.textContent = t('errorPrefix') + e.message;
+  }
   setTimeout(() => { status.textContent = ''; }, 2000);
 };
 
@@ -1010,12 +1042,23 @@ document.getElementById('worldAiEditBtn').onclick = async () => {
   }
 };
 
-document.getElementById('startAdventureBtn').onclick = async () => {
+async function startAdventureFromEditor() {
   const res = await fetch(`${API}/worlds/${currentWorldId}/saves`, { method: 'POST' });
   const data = await res.json();
-  if (!res.ok) return alert(t('cannotStartAdventure') + data.error);
+  if (!res.ok) throw new Error(data.error);
   const worldData = await fetch(`${API}/worlds/${currentWorldId}`).then(r => r.json());
   showCharacterSelect(worldData.world, worldData.playableCharacters, data.save.id);
+}
+
+document.getElementById('saveAndPlayBtn').onclick = async () => {
+  const status = document.getElementById('worldEditStatus');
+  try {
+    await saveWholeWorldEditor();
+    await startAdventureFromEditor();
+  } catch (e) {
+    status.textContent = t('errorPrefix') + e.message;
+    setTimeout(() => { status.textContent = ''; }, 2000);
+  }
 };
 
 document.getElementById('deleteWorldBtn').onclick = async () => {
@@ -1214,7 +1257,7 @@ function renderCharacterEditList(characters) {
       </div>
     `;
     renderCharacterPortrait(card, c, currentWorldId);
-    card.querySelector('.char-save-btn').onclick = async () => {
+    card._save = async () => {
       const body = {
         name: document.getElementById(`${idPrefix}-name`).value,
         description: document.getElementById(`${idPrefix}-desc`).value,
@@ -1225,8 +1268,16 @@ function renderCharacterEditList(characters) {
       const res = await fetch(`${API}/worlds/${currentWorldId}/characters/${c.id}`, {
         method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body)
       });
-      const status = document.getElementById('characterEditStatus');
-      status.textContent = res.ok ? t('characterSavedStatus') : t('errorSavingCharacter');
+      if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.error || t('errorSavingCharacter')); }
+    };
+    card.querySelector('.char-save-btn').onclick = async () => {
+      const status = document.getElementById('worldEditStatus');
+      try {
+        await card._save();
+        status.textContent = t('characterSavedStatus');
+      } catch (e) {
+        status.textContent = t('errorPrefix') + e.message;
+      }
       setTimeout(() => { status.textContent = ''; }, 2000);
     };
     card.querySelector('.char-delete-btn').onclick = async () => {
@@ -1271,7 +1322,7 @@ function renderTrackedItemsEditor(items) {
     card.querySelector(`#${idPrefix}-datatype`).value = item.dataType;
     card.querySelector(`#${idPrefix}-visibility`).value = item.visibility;
     card.querySelector(`#${idPrefix}-auto`).checked = Boolean(item.updateAutomatically);
-    card.querySelector('.ti-save-btn').onclick = async () => {
+    card._save = async () => {
       const dataType = document.getElementById(`${idPrefix}-datatype`).value;
       const rawInitial = document.getElementById(`${idPrefix}-initial`).value;
       const body = {
@@ -1287,9 +1338,17 @@ function renderTrackedItemsEditor(items) {
         method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body)
       });
       const data = await res.json();
-      if (res.ok) Object.assign(item, data.item);
-      const status = document.getElementById('characterEditStatus');
-      status.textContent = res.ok ? t('characterSavedStatus') : t('errorSavingCharacter');
+      if (!res.ok) throw new Error(data.error || t('errorSavingCharacter'));
+      Object.assign(item, data.item);
+    };
+    card.querySelector('.ti-save-btn').onclick = async () => {
+      const status = document.getElementById('worldEditStatus');
+      try {
+        await card._save();
+        status.textContent = t('characterSavedStatus');
+      } catch (e) {
+        status.textContent = t('errorPrefix') + e.message;
+      }
       setTimeout(() => { status.textContent = ''; }, 2000);
     };
     card.querySelector('.ti-delete-btn').onclick = async () => {
@@ -1336,7 +1395,7 @@ function renderNpcEditor(npcs) {
         <button class="text-btn danger-text npc-delete-btn">${t('deleteCharacterBtn')}</button>
       </div>
     `;
-    card.querySelector('.npc-save-btn').onclick = async () => {
+    card._save = async () => {
       const body = {
         name: document.getElementById(`${idPrefix}-name`).value,
         role: document.getElementById(`${idPrefix}-role`).value,
@@ -1348,8 +1407,16 @@ function renderNpcEditor(npcs) {
       const res = await fetch(`${API}/worlds/${currentWorldId}/npcs/${npc.id}`, {
         method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body)
       });
-      const status = document.getElementById('characterEditStatus');
-      status.textContent = res.ok ? t('characterSavedStatus') : t('errorSavingCharacter');
+      if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.error || t('errorSavingCharacter')); }
+    };
+    card.querySelector('.npc-save-btn').onclick = async () => {
+      const status = document.getElementById('worldEditStatus');
+      try {
+        await card._save();
+        status.textContent = t('characterSavedStatus');
+      } catch (e) {
+        status.textContent = t('errorPrefix') + e.message;
+      }
       setTimeout(() => { status.textContent = ''; }, 2000);
     };
     card.querySelector('.npc-delete-btn').onclick = async () => {
@@ -1391,7 +1458,7 @@ document.getElementById('generateCharacterBtn').onclick = async () => {
   if (!description) return;
   const btn = document.getElementById('generateCharacterBtn');
   btn.disabled = true;
-  const status = document.getElementById('characterEditStatus');
+  const status = document.getElementById('worldEditStatus');
   status.textContent = t('generatingStatus');
   try {
     const res = await fetch(`${API}/worlds/${currentWorldId}/characters/generate`, {
@@ -2703,17 +2770,19 @@ document.getElementById('saveSettingsBtn').onclick = async () => {
   setTimeout(() => { document.getElementById('settingsStatus').textContent = ''; }, 2000);
 };
 
-// Collapsible settings-group sections -- Settings has grown enough fields
-// (text provider + keys, background model, images + keys) that scrolling
-// past ones you're not touching was the actual complaint. Collapsed state
-// persists per section across visits (localStorage, per-viewer only -- see
-// artifact-capabilities reasoning: nothing here needs to sync across
-// devices or be readable server-side). Text/Images default collapsed (the
-// two flagged as the worst offenders); Background model/Costs default open
-// since they're short. Scoped to #view-settings's own groups -- the World
-// editor reuses the same .settings-group class but isn't wired up here.
+// Collapsible settings-group sections -- both Settings and the World editor
+// have grown enough fields that scrolling past ones you're not touching was
+// the actual complaint. Collapsed state persists per section across visits
+// (localStorage, per-viewer only -- see artifact-capabilities reasoning:
+// nothing here needs to sync across devices or be readable server-side).
+// Group ids are unique across both views (see index.html's data-group-id
+// values), so one shared localStorage key namespace is fine. Settings'
+// Text/Images default collapsed (the two flagged as the worst offenders),
+// Background model/Costs default open since they're short; every World
+// editor group defaults collapsed (see index.html) -- that page's whole
+// complaint was its length, not any one section in particular.
 function initSettingsGroupToggles() {
-  document.querySelectorAll('#view-settings .settings-group[data-group-id]').forEach(group => {
+  document.querySelectorAll('.settings-group[data-group-id]').forEach(group => {
     const id = group.dataset.groupId;
     const heading = group.querySelector('h3');
     if (!heading) return;

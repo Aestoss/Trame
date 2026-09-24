@@ -209,7 +209,7 @@
     <p id="worldLanguageInfo" class="hint"></p>
     <p id="worldVersionInfo" class="hint"></p>
 
-    <div class="settings-group">
+    <div class="settings-group collapsed" data-group-id="world-info">
       <h3 data-i18n="worldEditInfoHeading"></h3>
       <label><span data-i18n="worldTitleLabel"></span>
         <input id="worldTitleInput" type="text">
@@ -286,18 +286,16 @@
       <label><span data-i18n="worldImageStyleSuffixLabel"></span> <span class="hint-inline" data-i18n="worldImageStyleSuffixHint"></span>
         <input id="worldImageStyleSuffixInput" type="text">
       </label>
-      <button id="saveWorldEditBtn" class="primary-btn" data-i18n="saveBtn"></button>
-      <p id="worldEditStatus" class="hint"></p>
     </div>
 
-    <div class="settings-group">
+    <div class="settings-group collapsed" data-group-id="world-skills">
       <h3 data-i18n="worldSkillsHeading"></h3>
       <p class="hint" data-i18n="worldSkillsHint"></p>
       <div id="worldSkillsList" class="skills-edit-list"></div>
       <button id="addSkillBtn" class="text-btn" data-i18n="addSkillBtn"></button>
     </div>
 
-    <div class="settings-group">
+    <div class="settings-group collapsed" data-group-id="world-victory-defeat">
       <h3 data-i18n="victoryDefeatHeading"></h3>
       <label><span data-i18n="worldVictoryConditionLabel"></span> <span class="hint-inline" data-i18n="worldConditionHint"></span>
         <textarea id="worldVictoryConditionInput" rows="2"></textarea>
@@ -313,21 +311,21 @@
       </label>
     </div>
 
-    <div class="settings-group">
+    <div class="settings-group collapsed" data-group-id="world-tracked-items">
       <h3 data-i18n="trackedItemsHeading"></h3>
       <p class="hint" data-i18n="trackedItemsHint"></p>
       <div id="trackedItemsEditList" class="tracked-item-edit-list"></div>
       <button id="addTrackedItemBtn" class="text-btn" data-i18n="addTrackedItemBtn"></button>
     </div>
 
-    <div class="settings-group">
+    <div class="settings-group collapsed" data-group-id="world-npcs">
       <h3 data-i18n="npcsHeading"></h3>
       <p class="hint" data-i18n="npcsHint"></p>
       <div id="npcEditList" class="npc-edit-list"></div>
       <button id="addNpcBtn" class="text-btn" data-i18n="addNpcBtn"></button>
     </div>
 
-    <div class="settings-group">
+    <div class="settings-group collapsed" data-group-id="world-ai-edit">
       <h3 data-i18n="worldAiEditHeading"></h3>
       <p class="hint" data-i18n="worldAiEditHint"></p>
       <textarea id="worldAiEditInput" rows="2" data-i18n-placeholder="worldAiEditPlaceholder"></textarea>
@@ -335,7 +333,7 @@
       <p id="worldAiEditStatus" class="hint"></p>
     </div>
 
-    <div class="settings-group">
+    <div class="settings-group collapsed" data-group-id="world-characters">
       <h3 data-i18n="playableCharactersHeading"></h3>
       <div id="editCharacterList" class="character-edit-list"></div>
       <button id="addCharacterBtn" class="text-btn" data-i18n="addCharacterBtn"></button>
@@ -343,10 +341,13 @@
         <input id="aiCharacterDescInput" type="text" data-i18n-placeholder="aiCharacterDescPlaceholder">
         <button id="generateCharacterBtn" class="primary-btn" data-i18n="generateCharacterBtn"></button>
       </div>
-      <p id="characterEditStatus" class="hint"></p>
     </div>
 
-    <button id="startAdventureBtn" class="primary-btn big-btn" data-i18n="startAdventureBtn"></button>
+    <div class="world-edit-save-row">
+      <button id="saveWorldEditAllBtn" class="primary-btn big-btn" data-i18n="saveWorldEditAllBtn"></button>
+      <button id="saveAndPlayBtn" class="primary-btn big-btn" data-i18n="saveAndPlayBtn"></button>
+    </div>
+    <p id="worldEditStatus" class="hint"></p>
     <button id="deleteWorldBtn" class="text-btn danger-text" data-i18n="deleteWorldBtn"></button>
   </section>
 

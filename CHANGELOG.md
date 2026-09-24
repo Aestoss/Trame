@@ -1,5 +1,33 @@
 # Changelog
 
+## 2026-09-24 — Éditeur de monde : sections repliables + vrai bouton "Enregistrer tout", correctif de perte silencieuse
+
+Deux retours liés : la page était devenue "horriblement longue", et les
+modifications de personnages semblaient ne pas être enregistrées.
+
+- **Correctif de fond** (`public/app.js`) : le seul bouton "Enregistrer" de
+  la page (`saveWorldEditBtn`, en haut) n'a jamais touché aux personnages,
+  objets suivis ou PNJ — chacun vit dans sa propre table avec sa propre
+  route PATCH, et chaque carte avait son propre petit bouton "Enregistrer"
+  séparé, facile à ne pas remarquer. Modifier un personnage puis cliquer le
+  bouton principal perdait donc silencieusement le changement. Chaque carte
+  (personnage/objet suivi/PNJ) attache maintenant sa fonction de sauvegarde
+  à l'élément lui-même (`card._save`) ; un nouveau bouton unique en bas de
+  page (`saveWholeWorldEditor`) parcourt toutes les cartes actuellement
+  affichées et les enregistre en parallèle avec les champs du monde —
+  un clic sauvegarde vraiment toute la page, plus seulement la première
+  section. Les boutons individuels par carte restent fonctionnels.
+- **Sections repliables** (`public/index.html`/`style.css`/`app.js`) :
+  les 7 sections de l'éditeur (`data-group-id`, même mécanisme que les
+  Réglages) démarrent repliées par défaut — la page entière était le
+  problème, pas une section en particulier. `initSettingsGroupToggles`
+  généralisé aux deux pages (Réglages + Éditeur de monde) au lieu d'être
+  limité aux Réglages.
+- **Deux boutons en bas de page** : "💾 Enregistrer" (sauvegarde
+  seule) et "💾▶ Enregistrer et jouer" (sauvegarde puis démarre une
+  nouvelle aventure) — remplacent l'ancien "▶ Commencer une aventure" qui
+  ne sauvegardait rien avant de lancer la partie.
+
 ## 2026-09-24 — Mastermind à chaque tour + requête "prospective" pour la mémoire
 
 Feedback #1, dernier point resté ouvert du lot précédent (voir l'entrée
