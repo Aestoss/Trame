@@ -1,5 +1,40 @@
 # Changelog
 
+## 2026-09-24 — Retours de partie : temps/lieu visibles, plan du Mastermind consultable, objets suivis repliables, second champ pour l'ellipse
+
+Suite à une partie réelle en production, quatre lacunes remontées par
+l'utilisateur :
+
+- **Panneau temps/lieu toujours visible** (`#storyTimePlace`, `public/
+  index.html`/`app.js`/`style.css`) : bandeau collant (`position: sticky`)
+  au-dessus du texte du chapitre, affichant la date courante (`storyClock`,
+  déjà calculée depuis le Milestone 1 mais jamais renvoyée au client — ajouté
+  à `GET /api/saves/:id`) et le lieu courant (`state_updates.location`,
+  déjà généré par le Writer à chaque tour mais silencieusement ignoré par
+  `persistTurn` — maintenant persisté sur `save.currentLocation`, inclus
+  dans `captureSnapshot`/`rewindToTurn` pour rester cohérent avec "reprendre
+  à partir d'ici").
+- **Plan du Mastermind consultable en mode auteur** (`#mastermindPlanBox`) :
+  jusqu'ici le plan actif (`mastermindPlans`, Milestone 3) n'était lisible
+  nulle part dans l'app, même en mode auteur — `getActiveMastermindPlan`
+  exporté et renvoyé par `GET /api/saves/:id?debug=1`, affiché en lecture
+  seule (résumé + points) à côté de secretInfoBox/proofreaderFlagBox.
+- **Objets suivis repliés par défaut** (`#trackedItemsToggleBtn`) : le
+  panneau `trackedItemsPanel` démarre replié (`.collapsed`) et se déplie via
+  un nouveau bouton 🎒 dans la rangée d'icônes, pour alléger la page de jeu.
+- **Second champ pour l'ellipse temporelle** (`#timeSkipBehaviorInput`) :
+  jusqu'ici "passer du temps" ne demandait que ce vers quoi l'ellipse devait
+  mener (`hint`) ; un second champ optionnel décrit maintenant le
+  comportement du personnage pendant cette période (`behavior`), transmis
+  à `buildTimeSkipPrompt`/`playTimeSkipStreaming` et inclus dans la requête
+  envoyée au Récupérateur (`[hint, behavior].join(' — ')`).
+
+Point *volontairement* non traité dans ce lot : la refonte du Mastermind
+pour qu'il tourne à chaque tour (au lieu de tous les `MASTERMIND_EVERY = 5`
+tours) et que sa sortie alimente directement le Récupérateur — implique des
+arbitrages coût/latence non tranchés, remis à l'utilisateur avant
+implémentation.
+
 ## 2026-09-23 — Outils de débogage pour surveiller les 5 rôles en production
 
 Contexte : impossible pour moi (l'assistant) d'atteindre directement l'URL

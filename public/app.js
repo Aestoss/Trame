@@ -58,9 +58,14 @@ const UI = {
     regeneratePastConfirm: 'Régénérer ce tour supprimera définitivement tous les tours suivants. Continuer ?',
     timeSkipHintLabel: 'Vers quoi veux-tu avancer ?',
     timeSkipHintHint: '(optionnel — "jusqu\'à mon arrivée à la capitale", "jusqu\'à ce que je sois guéri"...)',
+    timeSkipBehaviorLabel: 'Comment ton personnage se comporte-t-il pendant ce temps ?',
+    timeSkipBehaviorHint: '(optionnel — "reste prudent, évite d\'attirer l\'attention", "s\'entraîne dur"...)',
     timeSkipConfirmBtn: '⏩ Passer du temps',
     timeSkipThinking: 'Le temps passe...',
-    timeSkipEcho: hint => hint ? `⏩ Passage du temps : ${hint}` : '⏩ Passage du temps',
+    timeSkipEcho: (hint, behavior) => {
+      const parts = [hint, behavior].filter(s => s && s.trim());
+      return parts.length ? `⏩ Passage du temps : ${parts.join(' — ')}` : '⏩ Passage du temps';
+    },
     timeSkipBadge: elapsed => `⏩ ${elapsed} passé`,
     povCharacterLabel: 'À travers les yeux de qui ?',
     povHintLabel: 'Que doit montrer cette scène ?',
@@ -72,6 +77,8 @@ const UI = {
     povNoCharacters: "Aucun personnage rencontré n'est disponible pour l'instant.",
     proofreaderFlagPacingPrefix: 'Incohérence possible de rythme temporel :',
     proofreaderFlagFactPrefix: 'Contradiction possible avec un fait enregistré :',
+    mastermindPlanBoxLabel: '🎭 Plan du Mastermind (caché des joueurs)',
+    mastermindPlanBoxTurn: turnNumber => `révisé au tour ${turnNumber}`,
     cancelBtn: 'Annuler',
     saveBtn: 'Enregistrer',
     sendBtn: 'Envoyer',
@@ -150,6 +157,7 @@ const UI = {
     startingItemValuesHint: "Valeurs de départ spécifiques à ce personnage — laisser vide pour utiliser la valeur par défaut de l'objet.",
     trackedItemsHeading: 'Objets suivis',
     trackedItemsHint: "Inventaire, jauges, réputation... Ajouter un nouvel objet n'affecte pas les parties en cours (elles gardent la valeur par défaut tant qu'elles ne l'ont pas rencontré).",
+    trackedItemsToggleBtn: 'Afficher/masquer les objets suivis',
     addTrackedItemBtn: '+ Ajouter un objet suivi',
     newTrackedItemDefaultName: 'Nouvel objet',
     trackedItemNamePlaceholder: 'Nom (ex : Inventaire)',
@@ -278,9 +286,14 @@ const UI = {
     regeneratePastConfirm: 'Regenerating this turn will permanently delete every turn after it. Continue?',
     timeSkipHintLabel: 'What should the skip lead to?',
     timeSkipHintHint: '(optional — "until I reach the capital", "until I\'m healed"...)',
+    timeSkipBehaviorLabel: 'How does your character behave during this time?',
+    timeSkipBehaviorHint: '(optional — "stays cautious, avoids attention", "trains hard"...)',
     timeSkipConfirmBtn: '⏩ Skip ahead',
     timeSkipThinking: 'Time passes...',
-    timeSkipEcho: hint => hint ? `⏩ Time skip: ${hint}` : '⏩ Time skip',
+    timeSkipEcho: (hint, behavior) => {
+      const parts = [hint, behavior].filter(s => s && s.trim());
+      return parts.length ? `⏩ Time skip: ${parts.join(' — ')}` : '⏩ Time skip';
+    },
     timeSkipBadge: elapsed => `⏩ ${elapsed} passed`,
     povCharacterLabel: 'Through whose eyes?',
     povHintLabel: 'What should this scene show?',
@@ -292,6 +305,8 @@ const UI = {
     povNoCharacters: 'No characters you\'ve met are available yet.',
     proofreaderFlagPacingPrefix: 'Possible pacing contradiction:',
     proofreaderFlagFactPrefix: 'Possible contradiction with a recorded fact:',
+    mastermindPlanBoxLabel: '🎭 Mastermind plan (hidden from players)',
+    mastermindPlanBoxTurn: turnNumber => `reviewed at turn ${turnNumber}`,
     cancelBtn: 'Cancel',
     saveBtn: 'Save',
     sendBtn: 'Send',
@@ -370,6 +385,7 @@ const UI = {
     startingItemValuesHint: "Starting values specific to this character — leave blank to use the item's default value.",
     trackedItemsHeading: 'Tracked items',
     trackedItemsHint: "Inventory, gauges, reputation... Adding a new item doesn't affect saves already in progress (they keep the default value until they encounter it).",
+    trackedItemsToggleBtn: 'Show/hide tracked items',
     addTrackedItemBtn: '+ Add a tracked item',
     newTrackedItemDefaultName: 'New item',
     trackedItemNamePlaceholder: 'Name (e.g. Inventory)',
@@ -487,6 +503,7 @@ let currentPageIndex = 0;   // which turn is currently displayed
 let currentTimelineEvents = []; // past time skips (see gameEngine.js's timelineEvents), keyed by turnNumber for the badge in renderPage
 let currentSaveCharacters = []; // characters met so far in this save (see server.js's saveCharacters), for the POV picker
 let currentProofreaderFlags = []; // author-mode-only pacing contradictions (see roles/proofreader.js), keyed by turnNumber -- empty outside debug mode, server never sends them otherwise
+let currentMastermindPlan = null; // author-mode-only active Mastermind plan (see roles/mastermind.js) -- null outside debug mode, server never sends it otherwise
 let debugModeOn = false;    // "mode auteur": reveals hidden info (secret info box, outcome badges) -- talking
                              // to the narrator is a separate, always-visible field (#instructionInput below)
 let previousView = 'home';
@@ -1563,6 +1580,7 @@ function applySaveData(data, jumpToLatest) {
   currentTimelineEvents = data.timelineEvents || [];
   currentSaveCharacters = data.saveCharacters || [];
   currentProofreaderFlags = data.proofreaderFlags || [];
+  currentMastermindPlan = data.mastermindPlan || null;
 
   showView('story');
   document.getElementById('storyTitle').textContent = data.world.title;
@@ -1581,6 +1599,8 @@ function applySaveData(data, jumpToLatest) {
   } else {
     objectiveEl.classList.add('hidden');
   }
+  renderTimePlacePanel(data.save, data.storyClock);
+  renderMastermindPlanBox();
   document.getElementById('authorModeBtn').classList.toggle('active', debugModeOn);
   document.getElementById('debugDumpBtn').classList.toggle('hidden', !debugModeOn);
   document.getElementById('regeneratePopover').classList.add('hidden');
@@ -1593,7 +1613,11 @@ function applySaveData(data, jumpToLatest) {
   if (currentTurns.length === 0 && data.world.background) {
     document.querySelector('.turn-nav').classList.add('hidden');
     document.getElementById('secretInfoBox').classList.add('hidden');
+    document.getElementById('proofreaderFlagBox').classList.add('hidden');
+    document.getElementById('mastermindPlanBox').classList.add('hidden');
     document.getElementById('trackedItemsPanel').classList.add('hidden');
+    document.getElementById('trackedItemsToggleBtn').classList.add('hidden');
+    document.getElementById('storyTimePlace').classList.add('hidden');
     document.getElementById('storyImage').classList.add('hidden');
     document.getElementById('pageContent').innerHTML = '';
     document.getElementById('gameOverBanner').classList.add('hidden');
@@ -1765,14 +1789,60 @@ function renderPage() {
   }
 }
 
+// Always-visible (sticky) summary of where/when the story currently stands --
+// see feedback item #5: neither storyClock (Milestone 1) nor
+// state_updates.location (persistTurn) had ever been surfaced anywhere in
+// the UI before this, even though both were already being recorded.
+function renderTimePlacePanel(save, storyClock) {
+  const panel = document.getElementById('storyTimePlace');
+  const dateEl = document.getElementById('storyTimePlaceDate');
+  const locationEl = document.getElementById('storyTimePlaceLocation');
+  const date = storyClock && storyClock.currentDate;
+  const location = save && save.currentLocation;
+  if (!date && !location) {
+    panel.classList.add('hidden');
+    return;
+  }
+  dateEl.textContent = date ? `🕒 ${date}` : '';
+  dateEl.classList.toggle('hidden', !date);
+  locationEl.textContent = location ? `📍 ${location}` : '';
+  locationEl.classList.toggle('hidden', !location);
+  panel.classList.remove('hidden');
+}
+
+// View-only surfacing of the Mastermind's hidden plan (see roles/mastermind.js,
+// feedback item #2) -- author-mode only, same gating as secretInfoBox/
+// proofreaderFlagBox: the server only ever sends mastermindPlan when
+// debug=1 was requested, so debugModeOn here just decides whether to show
+// what's already author-only data. Unlike those two, the plan isn't tied to
+// a specific turn (it's a save-level "what's currently steering the story"),
+// so this renders once per save-data refresh rather than per page.
+function renderMastermindPlanBox() {
+  const box = document.getElementById('mastermindPlanBox');
+  if (!debugModeOn || !currentMastermindPlan) {
+    box.classList.add('hidden');
+    box.innerHTML = '';
+    return;
+  }
+  const plan = currentMastermindPlan;
+  const beatsHtml = (plan.beats || []).length
+    ? `<ul>${plan.beats.map(b => `<li>${escapeHtml(b)}</li>`).join('')}</ul>`
+    : '';
+  box.innerHTML = `<strong>${escapeHtml(t('mastermindPlanBoxLabel'))}</strong> (${t('mastermindPlanBoxTurn')(plan.turnNumber)})<br>${escapeHtml(plan.summary || '')}${beatsHtml}`;
+  box.classList.remove('hidden');
+}
+
 function renderTrackedItems(items) {
   const panel = document.getElementById('trackedItemsPanel');
+  const toggleBtn = document.getElementById('trackedItemsToggleBtn');
   if (!items.length) {
     panel.classList.add('hidden');
     panel.innerHTML = '';
+    toggleBtn.classList.add('hidden');
     return;
   }
   panel.classList.remove('hidden');
+  toggleBtn.classList.remove('hidden');
   panel.innerHTML = items
     .map(i => `<div class="tracked-item${i.visibility === 'ai_only' ? ' tracked-item-hidden' : ''}"><span class="tracked-item-name">${escapeHtml(i.name)}</span><span class="tracked-item-value">${escapeHtml(String(i.value))}</span></div>`)
     .join('');
@@ -1965,16 +2035,19 @@ async function playAction({ actionText, instructionText }) {
 // Mirrors playAction's streaming logic closely -- same echo/pending/stream
 // dance, same recovery path on failure -- against the dedicated
 // time-skip/stream route instead.
-async function playTimeSkip(hint) {
+async function playTimeSkip(hint, behavior) {
   const hintEl = document.getElementById('timeSkipHintInput');
+  const behaviorEl = document.getElementById('timeSkipBehaviorInput');
   hintEl.value = '';
+  behaviorEl.value = '';
   resizeTextarea(hintEl);
+  resizeTextarea(behaviorEl);
   document.getElementById('timeSkipPopover').classList.add('hidden');
 
   const content = document.getElementById('pageContent');
   const echoedAction = document.createElement('div');
   echoedAction.className = 'player-action';
-  echoedAction.textContent = t('timeSkipEcho')(hint);
+  echoedAction.textContent = t('timeSkipEcho')(hint, behavior);
   content.appendChild(echoedAction);
   const pending = document.createElement('p');
   pending.className = 'loading';
@@ -1989,7 +2062,7 @@ async function playTimeSkip(hint) {
     const res = await fetch(`${API}/saves/${currentSaveId}/time-skip/stream`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ hint, debug: debugModeOn, ...(providerOverride ? { providerOverride } : {}) })
+      body: JSON.stringify({ hint, behavior, debug: debugModeOn, ...(providerOverride ? { providerOverride } : {}) })
     });
     if (!res.ok || !res.body) throw new Error(t('illegibleResponse')(res.status));
 
@@ -2037,7 +2110,9 @@ async function playTimeSkip(hint) {
       pending.remove();
       if (streaming) streaming.remove();
       hintEl.value = hint;
+      behaviorEl.value = behavior;
       resizeTextarea(hintEl);
+      resizeTextarea(behaviorEl);
       alert(t('errorPrefix') + e.message + t('retryHint'));
     }
   }
@@ -2133,6 +2208,7 @@ autoGrowTextarea(document.getElementById('instructionInput'), () => document.get
 autoGrowTextarea(document.getElementById('regenerateActionInput'));
 autoGrowTextarea(document.getElementById('regenerateNoteInput'));
 autoGrowTextarea(document.getElementById('timeSkipHintInput'));
+autoGrowTextarea(document.getElementById('timeSkipBehaviorInput'));
 autoGrowTextarea(document.getElementById('povHintInput'));
 
 document.getElementById('prevPageBtn').onclick = () => {
@@ -2282,6 +2358,7 @@ document.getElementById('editWorldBtn').onclick = () => openWorldEditor(currentW
 
 document.getElementById('timeSkipBtn').onclick = () => {
   document.getElementById('timeSkipHintInput').value = '';
+  document.getElementById('timeSkipBehaviorInput').value = '';
   document.getElementById('timeSkipPopover').classList.remove('hidden');
 };
 document.getElementById('timeSkipCancelBtn').onclick = () => {
@@ -2289,7 +2366,8 @@ document.getElementById('timeSkipCancelBtn').onclick = () => {
 };
 document.getElementById('timeSkipConfirmBtn').onclick = () => {
   const hint = document.getElementById('timeSkipHintInput').value.trim();
-  playTimeSkip(hint);
+  const behavior = document.getElementById('timeSkipBehaviorInput').value.trim();
+  playTimeSkip(hint, behavior);
 };
 
 document.getElementById('povBtn').onclick = () => {
@@ -2354,6 +2432,10 @@ document.getElementById('debugDumpBtn').onclick = async () => {
   } finally {
     setTimeout(() => { status.classList.add('hidden'); status.textContent = ''; }, 2500);
   }
+};
+
+document.getElementById('trackedItemsToggleBtn').onclick = () => {
+  document.getElementById('trackedItemsPanel').classList.toggle('collapsed');
 };
 
 // ---------- Settings ----------

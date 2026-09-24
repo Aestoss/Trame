@@ -83,6 +83,10 @@
     <h2 id="storyTitle"></h2>
     <p id="storyCharacter" class="story-character hidden"></p>
     <p id="storyObjective" class="story-objective hidden"></p>
+    <div id="storyTimePlace" class="story-time-place hidden">
+      <span id="storyTimePlaceDate"></span>
+      <span id="storyTimePlaceLocation"></span>
+    </div>
 
     <!-- The turn's own text always comes first -- everything else about the
          turn (reveal/edit, secret info, image, tracked items, actions) is
@@ -97,13 +101,15 @@
       <button id="povBtn" class="icon-btn" data-i18n-title="povBtn">🎭</button>
       <button id="purgeImagesBtn" class="icon-btn" data-i18n-title="purgeImagesBtn">🗑️🖼️</button>
       <button id="debugDumpBtn" class="icon-btn hidden" data-i18n-title="debugDumpBtn">📋</button>
+      <button id="trackedItemsToggleBtn" class="icon-btn hidden" data-i18n-title="trackedItemsToggleBtn">🎒</button>
     </div>
     <p id="purgeImagesStatus" class="hint hidden"></p>
     <p id="debugDumpStatus" class="hint hidden"></p>
     <div id="secretInfoBox" class="secret-info-box hidden"></div>
     <div id="proofreaderFlagBox" class="proofreader-flag-box hidden"></div>
+    <div id="mastermindPlanBox" class="mastermind-plan-box hidden"></div>
     <div id="storyImage" class="story-image hidden"><img id="storyImageEl" alt=""></div>
-    <div id="trackedItemsPanel" class="tracked-items-panel hidden"></div>
+    <div id="trackedItemsPanel" class="tracked-items-panel hidden collapsed"></div>
 
     <!-- Not nested inside pastPageActions/latestPageActions: regenerateBtn
          lives in the always-visible turn-nav below and works on both a past
@@ -128,6 +134,9 @@
     <div id="timeSkipPopover" class="regenerate-popover hidden">
       <label><span data-i18n="timeSkipHintLabel"></span> <span class="hint-inline" data-i18n="timeSkipHintHint"></span>
         <textarea rows="1" id="timeSkipHintInput"></textarea>
+      </label>
+      <label><span data-i18n="timeSkipBehaviorLabel"></span> <span class="hint-inline" data-i18n="timeSkipBehaviorHint"></span>
+        <textarea rows="1" id="timeSkipBehaviorInput"></textarea>
       </label>
       <div class="regenerate-popover-actions">
         <button id="timeSkipConfirmBtn" class="primary-btn" data-i18n="timeSkipConfirmBtn"></button>

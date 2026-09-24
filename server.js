@@ -20,7 +20,7 @@ const {
   addNpc, updateNpc, deleteNpc,
   createSave, getSave, selectCharacter, continueAfterVictory, deleteSave, purgeSaveImages, logDebugSnapshot,
   playTurn, playTurnStreaming, playTimeSkipStreaming, playPovTurnStreaming, rewindToTurn, regenerateTurn, regenerateTurnStreaming, getSettings,
-  listAvailableOllamaModels, getOllamaStatus, listAvailableLocalSdModels
+  listAvailableOllamaModels, getOllamaStatus, listAvailableLocalSdModels, getStoryClock, getActiveMastermindPlan
 } = require('./lib/gameEngine');
 const { getTotalCosts, getWorldCosts } = require('./lib/costTracker');
 
@@ -423,6 +423,11 @@ app.get('/api/saves/:id', (req, res) => {
     const proofreaderFlags = debug
       ? db.get('proofreaderFlags').filter({ saveId: save.id }).sortBy('turnNumber').value()
       : [];
+    // The Mastermind's hidden plan (see roles/mastermind.js, Milestone 3) was
+    // never surfaced anywhere in the app before -- same author-only treatment
+    // as proofreaderFlags/secretInfo above, since it's meant to stay hidden
+    // from the player but should still be checkable in "mode auteur".
+    const mastermindPlan = debug ? (getActiveMastermindPlan(save.id) || null) : null;
     res.json({
       save: debug ? save : publicSave(save),
       world,
@@ -430,6 +435,8 @@ app.get('/api/saves/:id', (req, res) => {
       timelineEvents,
       saveCharacters,
       proofreaderFlags,
+      mastermindPlan,
+      storyClock: getStoryClock(save.id),
       playableCharacters: worldPlayableCharacters(world.id)
     });
   } catch (e) {
@@ -553,9 +560,11 @@ app.post('/api/saves/:id/turn/stream', async (req, res) => {
 // which needs no separate route -- the Writer can already decide to skip
 // on any normal turn). Same newline-delimited JSON event protocol as
 // POST .../turn/stream. hint is optional free text for what the skip
-// should cover or lead to.
+// should cover or lead to; behavior is a separate optional field for how
+// the player character actually spends the skipped time (see
+// buildTimeSkipPrompt's own distinction between the two).
 app.post('/api/saves/:id/time-skip/stream', async (req, res) => {
-  const { hint, debug, providerOverride } = req.body;
+  const { hint, behavior, debug, providerOverride } = req.body;
 
   res.writeHead(200, {
     'content-type': 'application/x-ndjson; charset=utf-8',
@@ -566,7 +575,7 @@ app.post('/api/saves/:id/time-skip/stream', async (req, res) => {
 
   try {
     const save = getSave(req.params.id);
-    const turn = await playTimeSkipStreaming(req.params.id, hint, {
+    const turn = await playTimeSkipStreaming(req.params.id, hint, behavior, {
       providerOverride,
       onChapterChunk: (text) => send({ type: 'chunk', text })
     });
