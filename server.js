@@ -20,7 +20,7 @@ const {
   addNpc, updateNpc, deleteNpc,
   createSave, getSave, selectCharacter, continueAfterVictory, deleteSave, purgeSaveImages, logDebugSnapshot,
   playTurn, playTurnStreaming, playTimeSkipStreaming, playPovTurnStreaming, rewindToTurn, regenerateTurn, regenerateTurnStreaming, getSettings,
-  listAvailableOllamaModels, getOllamaStatus, listAvailableLocalSdModels, getStoryClock, getActiveMastermindPlan
+  listAvailableOllamaModels, getOllamaStatus, listAvailableLocalSdModels, getStoryClock, getActiveMastermindPlan, getCurrentOutfit
 } = require('./lib/gameEngine');
 const { getTotalCosts, getWorldCosts } = require('./lib/costTracker');
 
@@ -432,6 +432,12 @@ app.get('/api/saves/:id', (req, res) => {
     // bloats the response.
     const rawMastermindPlan = debug ? getActiveMastermindPlan(save.id) : null;
     const mastermindPlan = rawMastermindPlan ? (({ embedding, ...rest }) => rest)(rawMastermindPlan) : null;
+    const playableCharacters = worldPlayableCharacters(world.id);
+    // The MC's current outfit (see lib/characterOutfits.js) -- not hidden
+    // state like secretInfo/mastermindPlan above, just descriptive flavor,
+    // so sent on every request rather than gated to debug=1.
+    const activePlayableCharacter = playableCharacters.find(c => c.id === save.activeCharacterId);
+    const mcOutfit = activePlayableCharacter ? getCurrentOutfit(save.id, activePlayableCharacter.name) : null;
     res.json({
       save: debug ? save : publicSave(save),
       world,
@@ -441,7 +447,8 @@ app.get('/api/saves/:id', (req, res) => {
       proofreaderFlags,
       mastermindPlan,
       storyClock: getStoryClock(save.id),
-      playableCharacters: worldPlayableCharacters(world.id)
+      mcOutfit: mcOutfit ? mcOutfit.description : null,
+      playableCharacters
     });
   } catch (e) {
     res.status(404).json({ error: e.message });

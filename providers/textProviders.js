@@ -717,6 +717,14 @@ async function callMock({ system, user }) {
     // "learned during a POV scene, must not leak to the MC" direction.
     const povCharacterMatch = (system || '').match(/narrated from (.+?)'s perspective, without the player character present/);
     const povCharacterName = povCharacterMatch && povCharacterMatch[1];
+    // Feedback: "the AI tends to not get the info when someone changed
+    // clothes or is disguised" -- exercises CLOTHING & DISGUISES end to end
+    // (see lib/characterOutfits.js). Keys off the first name in the
+    // "character" field hint, which fireArchivist always puts the active/MC
+    // character first, same trigger-word pattern as tookLantern above.
+    const disguised = /disguise/i.test(action);
+    const namesHintMatch = user.match(/for the "character" field: (.+?)\./);
+    const firstCharacterName = namesHintMatch && namesHintMatch[1].split(',')[0].trim();
     return {
       usage: noUsage,
       // Exercises the { fact, character, type, known_by } shape (see
@@ -726,7 +734,10 @@ async function callMock({ system, user }) {
       text: JSON.stringify({
         new_facts: povCharacterName
           ? [{ fact: `${povCharacterName} noticed something they haven't told anyone.`, character: povCharacterName, type: 'plot', known_by: [povCharacterName] }]
-          : tookLantern ? [{ fact: 'Keeper Oduya has tended the lighthouse for eleven years.', character: 'Keeper Oduya', type: 'biographical', known_by: null }] : []
+          : tookLantern ? [{ fact: 'Keeper Oduya has tended the lighthouse for eleven years.', character: 'Keeper Oduya', type: 'biographical', known_by: null }] : [],
+        outfit_changes: (disguised && firstCharacterName)
+          ? [{ character: firstCharacterName, description: 'a dockworker\'s patched coat and cap, collar turned up to hide the face', reason: 'disguised to slip past the Keeper\'s watchmen' }]
+          : []
       })
     };
   }

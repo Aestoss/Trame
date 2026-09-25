@@ -1,5 +1,48 @@
 # Changelog
 
+## 2026-09-25 — Tenue vestimentaire par personnage (registre chronologique, comme les ellipses temporelles)
+
+Retour : l'IA perd le fil des vêtements/déguisements récents — un
+changement de tenue est noyé dans le tas de faits généraux (`memoryFacts`,
+qui ne fait qu'accumuler, jamais "ce qui est vrai *maintenant*") et n'est
+donc jamais garanti de remonter au bon moment.
+
+- **Nouvelle table `characterOutfits`** (`lib/schema.sql`, `lib/
+  characterOutfits.js`) : historique par intervalle (comme `timelineEvents`
+  pour les ellipses), pas une pile qui grossit comme `memoryFacts` — une
+  seule ligne "active" (`endTurn: null`) par personnage à la fois ; un
+  changement de tenue clôt l'ancienne ligne (`endTurn`) et en ouvre une
+  nouvelle (`startTurn`). Champs : `description` (tenue complète,
+  autonome — utile telle quelle pour un prompt d'image), `reason`
+  (déguisement, tenue de cérémonie... si pertinent), `startTurn`/`endTurn`.
+- **L'Archiviste détecte les changements** (`lib/promptBuilder.js`,
+  `roles/archivist.js`) : nouveau champ `outfit_changes` en sortie, section
+  "CLOTHING & DISGUISES" dédiée dans ses instructions — distincte de
+  `new_facts` puisqu'une tenue *remplace* la précédente au lieu de
+  s'accumuler. Reçoit aussi les tenues actuellement enregistrées en entrée,
+  pour ne signaler que les vrais changements. Corrige au passage un angle
+  mort : le nom du MC n'était jamais inclus dans la liste de noms donnée à
+  l'Archiviste (seuls les PNJ l'étaient) — corrigé pour toutes les tenues
+  ET pour l'attribution des faits en général.
+- **Toujours dans le contexte du Writer** (`lib/gameEngine.js`,
+  `lib/promptBuilder.js`) : la tenue actuelle de chaque personnage
+  (MC compris) apparaît maintenant systématiquement dans son bloc de
+  fiche de personnage à chaque tour — plus besoin de compter sur la
+  recherche par similarité pour la faire remonter depuis l'archive
+  générale, ce qui est exactement ce qui la faisait disparaître après
+  quelques tours. Alimente aussi `image_prompt` par ricochet, puisque le
+  Writer écrit narration et prompt d'image dans le même appel, avec le
+  même contexte.
+- **Retour en arrière** : réactive la tenue précédente si celle qui était
+  active a été annulée par le rewind (même mécanisme que pour le plan du
+  Mastermind), au lieu de laisser le personnage sans tenue enregistrée.
+- **Visible en jeu** : la tenue actuelle du MC apparaît dans le bandeau
+  temps/lieu toujours visible (`👕`), en plus de la date et du lieu.
+- Portraits de référence des personnages (World Editor) volontairement
+  non affectés — restent basés sur l'apparence physique permanente, pas
+  la tenue du moment ; seules les images de scène par tour en bénéficient,
+  via le contexte enrichi ci-dessus.
+
 ## 2026-09-24 — Éditeur de monde : sections repliables + vrai bouton "Enregistrer tout", correctif de perte silencieuse
 
 Deux retours liés : la page était devenue "horriblement longue", et les

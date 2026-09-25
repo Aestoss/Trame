@@ -152,3 +152,18 @@ CREATE TABLE IF NOT EXISTS proofreaderFlags (
   data TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_proofreaderFlags_saveId ON proofreaderFlags(saveId);
+
+-- Per-character clothing/appearance-state history (see lib/characterOutfits.js):
+-- unlike memoryFacts, which only ever accumulates, an outfit is *current*
+-- state -- exactly one row per character has endTurn IS NULL (still being
+-- worn) at any time, and changing clothes closes that row (sets endTurn)
+-- and opens a new one, an interval history mirroring the time-skip
+-- mechanic's timelineEvents rather than the fact archive's append-only
+-- shape. Fixes narration/portraits losing track of a disguise or a change
+-- of clothes once it stops being the most recent thing said.
+CREATE TABLE IF NOT EXISTS characterOutfits (
+  id TEXT PRIMARY KEY,
+  saveId TEXT NOT NULL,
+  data TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_characterOutfits_saveId ON characterOutfits(saveId);

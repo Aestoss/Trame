@@ -1666,7 +1666,7 @@ function applySaveData(data, jumpToLatest) {
   } else {
     objectiveEl.classList.add('hidden');
   }
-  renderTimePlacePanel(data.save, data.storyClock);
+  renderTimePlacePanel(data.save, data.storyClock, data.mcOutfit);
   renderMastermindPlanBox();
   document.getElementById('authorModeBtn').classList.toggle('active', debugModeOn);
   document.getElementById('debugDumpBtn').classList.toggle('hidden', !debugModeOn);
@@ -1860,13 +1860,14 @@ function renderPage() {
 // see feedback item #5: neither storyClock (Milestone 1) nor
 // state_updates.location (persistTurn) had ever been surfaced anywhere in
 // the UI before this, even though both were already being recorded.
-function renderTimePlacePanel(save, storyClock) {
+function renderTimePlacePanel(save, storyClock, mcOutfit) {
   const panel = document.getElementById('storyTimePlace');
   const dateEl = document.getElementById('storyTimePlaceDate');
   const locationEl = document.getElementById('storyTimePlaceLocation');
+  const outfitEl = document.getElementById('storyTimePlaceOutfit');
   const date = storyClock && storyClock.currentDate;
   const location = save && save.currentLocation;
-  if (!date && !location) {
+  if (!date && !location && !mcOutfit) {
     panel.classList.add('hidden');
     return;
   }
@@ -1874,6 +1875,8 @@ function renderTimePlacePanel(save, storyClock) {
   dateEl.classList.toggle('hidden', !date);
   locationEl.textContent = location ? `📍 ${location}` : '';
   locationEl.classList.toggle('hidden', !location);
+  outfitEl.textContent = mcOutfit ? `👕 ${mcOutfit}` : '';
+  outfitEl.classList.toggle('hidden', !mcOutfit);
   panel.classList.remove('hidden');
 }
 

@@ -19,6 +19,7 @@ const { buildArchivistPrompt } = require('../lib/promptBuilder');
 const { normalizeNewFact, newMemoryFact } = require('../lib/memoryFacts');
 const { embedFact } = require('../lib/embedFact');
 const { getBackgroundModelConfig } = require('../lib/backgroundModel');
+const { applyOutfitChange } = require('../lib/characterOutfits');
 
 // Model choice: see lib/backgroundModel.js -- a fixed, cheap model
 // (gemini-3.5-flash-lite) once settings.backgroundModel.apiKey is set,
@@ -28,9 +29,9 @@ const { getBackgroundModelConfig } = require('../lib/backgroundModel');
 // present, so buildArchivistPrompt needs to scope known_by to whoever
 // actually was, instead of defaulting new facts to "publicly known" the
 // way a normal MC-POV chapter's facts do.
-async function extractFacts({ worldId, saveId, turnNumber, playerAction, chapterText, characterNames, povCharacter, settings }) {
+async function extractFacts({ worldId, saveId, turnNumber, playerAction, chapterText, characterNames, currentOutfits, povCharacter, settings }) {
   const { provider, model, apiKey, baseUrl } = getBackgroundModelConfig(settings);
-  const { system, user } = buildArchivistPrompt({ characterNames, playerAction, chapterText, povCharacter, language: settings.language });
+  const { system, user } = buildArchivistPrompt({ characterNames, playerAction, chapterText, currentOutfits, povCharacter, language: settings.language });
 
   let raw;
   try {
@@ -66,11 +67,23 @@ async function extractFacts({ worldId, saveId, turnNumber, playerAction, chapter
     db.get('memoryFacts').push(row).write();
     written++;
   }
+
+  let outfitsChanged = 0;
+  for (const rawOutfit of parsed.outfit_changes || []) {
+    if (!rawOutfit || typeof rawOutfit !== 'object') continue;
+    const character = typeof rawOutfit.character === 'string' ? rawOutfit.character.trim() : '';
+    const description = typeof rawOutfit.description === 'string' ? rawOutfit.description.trim() : '';
+    const reason = typeof rawOutfit.reason === 'string' ? rawOutfit.reason.trim() : null;
+    if (!character || !description) continue;
+    applyOutfitChange(saveId, turnNumber, character, description, reason);
+    outfitsChanged++;
+  }
+
   // Logged on every run, not just failures -- this is what lets a turn's
   // background activity be confirmed from Railway's own deploy logs alone,
   // without a debug dump: provider/model actually used (background key vs.
   // Writer's own), and how many facts actually landed vs. what the model proposed.
-  console.log(`[archivist] save=${saveId} turn=${turnNumber} provider=${provider} model=${model || '(default)'}: ${written}/${(parsed.new_facts || []).length} fact(s) written`);
+  console.log(`[archivist] save=${saveId} turn=${turnNumber} provider=${provider} model=${model || '(default)'}: ${written}/${(parsed.new_facts || []).length} fact(s) written, ${outfitsChanged} outfit(s) updated`);
 }
 
 module.exports = { extractFacts };
