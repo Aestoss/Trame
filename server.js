@@ -23,6 +23,7 @@ const {
   listAvailableOllamaModels, getOllamaStatus, listAvailableLocalSdModels, getStoryClock, getActiveMastermindPlan, getCurrentOutfit
 } = require('./lib/gameEngine');
 const { getTotalCosts, getWorldCosts } = require('./lib/costTracker');
+const { writeStoryPdf } = require('./lib/exportStory');
 
 const app = express();
 app.use(cors());
@@ -385,6 +386,18 @@ app.get('/api/saves', (req, res) => {
     };
   });
   res.json(list);
+});
+
+app.get('/api/saves/:id/export.pdf', (req, res) => {
+  try {
+    const save = getSave(req.params.id);
+    const world = getWorld(save.worldId);
+    const turns = db.get('turns').filter({ saveId: save.id }).sortBy('turnNumber').value();
+    const character = db.get('playableCharacters').find({ id: save.activeCharacterId }).value() || null;
+    writeStoryPdf(res, { world, character, turns });
+  } catch (e) {
+    res.status(404).json({ error: e.message });
+  }
 });
 
 app.post('/api/worlds/:id/saves', (req, res) => {

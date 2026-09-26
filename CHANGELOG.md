@@ -1,5 +1,36 @@
 # Changelog
 
+## 2026-09-26 — Export de l'histoire complète en PDF
+
+Demande : pouvoir extraire toute l'histoire d'une sauvegarde dans un PDF (ou
+équivalent).
+
+- **`lib/exportStory.js`** (nouveau) : génère le PDF avec `pdfkit` — page de
+  titre (titre du monde, personnage, description du cadre), puis un tour par
+  page (action du joueur en italique quand il y en a une, texte du chapitre),
+  et la mention victoire/fin de partie s'il y en a une. Volontairement
+  restreint au texte que le joueur lit réellement — jamais `secretInfo`,
+  `outcome`, les objets suivis, le plan caché du Mastermind ou les alertes du
+  Proofreader (tout ce que "mode auteur" révèle ailleurs) : ça doit se lire
+  comme un livre, pas comme un dump de debug.
+- **Police Liberation Serif embarquée** (`assets/fonts/`, licence SIL OFL —
+  voir `LICENSE-liberation-fonts.txt` dans le même dossier) plutôt que les
+  polices standards de pdfkit (Times-Roman etc.) : celles-ci ne supportent
+  que l'encodage WinAnsi (~220 caractères) et un test réel a montré la flèche
+  "→" utilisée pour l'action du joueur ressortir en caractères corrompus —
+  rien ne garantit qu'un chapitre écrit par l'IA ne contienne jamais un
+  caractère hors de cet ensemble. Vérifié après coup : flèche, guillemets
+  typographiques, tiret cadratin et accents français s'affichent tous
+  correctement.
+- **Nouvelle route** `GET /api/saves/:id/export.pdf` (streaming direct,
+  `content-disposition: attachment`) et bouton 📖 dans la barre d'icônes de
+  la vue histoire (`exportPdfBtn`), à côté du bouton d'édition du monde —
+  téléchargement en un clic, aucun fetch/blob côté client nécessaire.
+
+Testé de bout en bout avec le fournisseur mock : PDF valide (`pdftotext`),
+3 pages pour 2 tours joués, texte exact, flèche et tous les caractères
+accentués corrects.
+
 ## 2026-09-26 — Presets OpenRouter : DeepSeek V4.1 Flash et GLM 5.3 Flash
 
 Demande : un modèle OpenRouter pas cher et non censuré pour la narration.

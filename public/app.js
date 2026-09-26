@@ -33,6 +33,7 @@ const UI = {
     backGeneric: '‹ Retour',
     authorModeBtn: 'Mode auteur (révéler les informations cachées)',
     editWorldBtn: 'Modifier le monde',
+    exportPdfBtn: "Exporter l'histoire en PDF",
     timeSkipBtn: 'Passer du temps',
     povBtn: "Voir une scène d'un autre point de vue",
     purgeImagesBtn: 'Purger les images de cette partie',
@@ -263,6 +264,7 @@ const UI = {
     backGeneric: '‹ Back',
     authorModeBtn: 'Author mode (reveal hidden information)',
     editWorldBtn: 'Edit the world',
+    exportPdfBtn: 'Export the story as PDF',
     timeSkipBtn: 'Skip ahead in time',
     povBtn: 'See a scene from another point of view',
     purgeImagesBtn: 'Purge this save\'s images',
@@ -2479,6 +2481,13 @@ document.getElementById('backBtn').onclick = () => {
 };
 
 document.getElementById('editWorldBtn').onclick = () => openWorldEditor(currentWorldId);
+
+// Plain GET download -- no fetch/blob dance needed, the server sets
+// content-disposition: attachment (see server.js's export.pdf route) so
+// the browser saves it directly instead of navigating away from the story.
+document.getElementById('exportPdfBtn').onclick = () => {
+  window.location.href = `${API}/saves/${currentSaveId}/export.pdf`;
+};
 
 document.getElementById('timeSkipBtn').onclick = () => {
   document.getElementById('timeSkipHintInput').value = '';
