@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-09-26 — Presets OpenRouter : DeepSeek V4.1 Flash et GLM 5.3 Flash
+
+Demande : un modèle OpenRouter pas cher et non censuré pour la narration.
+Les deux modèles actuellement les plus utilisés pour le roleplay/l'écriture
+créative sur OpenRouter — aucune couche de modération ajoutée par le
+fournisseur, contexte large, prix très bas — ajoutés en tête de la liste de
+présélection OpenRouter (`MODEL_PRESETS.openrouter`, `public/app.js`) :
+`deepseek/deepseek-v4.1-flash` ($0.035/$0.29 par 1M) et `z-ai/glm-5.3-flash`
+($0.045/$0.14 par 1M). Pure liste de confort — le champ modèle reste du
+texte libre, n'importe quel identifiant fonctionne déjà sans ça.
+`lib/pricing.js` n'est pas touché : `openrouter: null` y est une décision
+déjà en place (le fournisseur relaie vers des modèles à prix trop variables
+pour qu'une estimation \$ ait un sens), donc pas d'estimation de coût
+affichée pour ces deux presets, comme pour tout autre modèle OpenRouter.
+
 ## 2026-09-26 — Correctif : le texte streamé apparaissait d'un coup, pas mot par mot
 
 Retour : "It appears at once instead of word by word." Diagnostic : les

@@ -2613,6 +2613,8 @@ const MODEL_PRESETS = {
     { id: 'gpt-4o-mini', label: 'GPT-4o mini — $0.15/$0.60 per 1M' }
   ],
   openrouter: [
+    { id: 'deepseek/deepseek-v4.1-flash', label: 'DeepSeek V4.1 Flash — $0.035/$0.29 per 1M, non modéré' },
+    { id: 'z-ai/glm-5.3-flash', label: 'GLM 5.3 Flash — $0.045/$0.14 per 1M, non modéré' },
     { id: 'anthropic/claude-sonnet-4.6', label: 'Claude Sonnet 4.6 (via OpenRouter)' },
     { id: 'openai/gpt-4o', label: 'GPT-4o (via OpenRouter)' },
     { id: 'meta-llama/llama-3.1-70b-instruct', label: 'Llama 3.1 70B (via OpenRouter)' }
