@@ -1990,6 +1990,56 @@ function resolveProviderOverride() {
   return { provider: fallbackProvider, model: document.getElementById('fallbackModel').value.trim() };
 }
 
+// Paces a streamed chapter's on-screen reveal independently of how the
+// bytes actually arrive over the wire. Real-world streaming turns out not
+// to be evenly spaced: current-generation Claude models run extended
+// "adaptive" thinking by default (see the confirmed production bug in
+// providers/textProviders.js's streamAnthropic), and that thinking phase
+// emits no visible text_delta at all -- so a turn can spend most of its
+// wall-clock time in total silence, then dump the entire chapter's worth
+// of deltas within a second or two once generation actually starts. Ever
+// since streaming shipped, all four call sites here wrote each incoming
+// chunk straight to the DOM (`streaming.textContent = streamedText`), so
+// that burst rendered as instantly as a non-streamed response would have
+// -- "It appears at once instead of word by word," reported after the
+// narration/state split shipped, but present since streaming was first
+// added; the split's own bursts (short) just made a pre-existing pacing
+// gap easier to notice. This buffers incoming text and reveals it a few
+// characters at a time on a steady clock, so the chapter always reads as
+// a live typewriter regardless of the delivery pattern underneath.
+function createTypewriter(el, { msPerTick = 16 } = {}) {
+  let queue = '';
+  let timer = null;
+  let onDrained = null;
+  function tick() {
+    if (!queue.length) {
+      timer = null;
+      if (onDrained) { const resolve = onDrained; onDrained = null; resolve(); }
+      return;
+    }
+    // Reveal a slice proportional to the current backlog: a big burst
+    // catches up quickly (a few hundred ms), while a small trickle still
+    // reads character by character instead of snapping in one write.
+    const n = Math.max(2, Math.ceil(queue.length / 25));
+    el.textContent += queue.slice(0, n);
+    queue = queue.slice(n);
+    timer = setTimeout(tick, msPerTick);
+  }
+  return {
+    push(text) {
+      queue += text;
+      if (!timer) tick();
+    },
+    // Resolves once every queued character has actually been painted --
+    // callers await this before swapping the streaming placeholder out for
+    // the final rendered page, so the reveal is never cut short mid-word.
+    whenDrained() {
+      if (!queue.length && !timer) return Promise.resolve();
+      return new Promise(resolve => { onDrained = resolve; });
+    }
+  };
+}
+
 // actionText and instructionText are the raw contents of the two always-
 // visible fields (see the segmented-card markup in index.html). Which
 // combination is present decides the turn's semantics: both -> a normal
@@ -2044,7 +2094,7 @@ async function playAction({ actionText, instructionText }) {
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-    let streamedText = '';
+    let typewriter = null;
     let doneEvent = null;
     let errorMessage = null;
 
@@ -2065,9 +2115,9 @@ async function playAction({ actionText, instructionText }) {
             streaming = document.createElement('p');
             streaming.className = 'chapter-streaming';
             content.appendChild(streaming);
+            typewriter = createTypewriter(streaming);
           }
-          streamedText += event.text;
-          streaming.textContent = streamedText;
+          typewriter.push(event.text);
         } else if (event.type === 'done') {
           doneEvent = event;
         } else if (event.type === 'error') {
@@ -2078,6 +2128,7 @@ async function playAction({ actionText, instructionText }) {
 
     if (errorMessage) throw new Error(errorMessage);
     if (!doneEvent) throw new Error(t('illegibleResponse')(res.status));
+    if (typewriter) await typewriter.whenDrained();
     await refreshSave(true);
   } catch (e) {
     if (!(await attemptRecovery(updatedAtBefore))) {
@@ -2139,7 +2190,7 @@ async function playTimeSkip(hint, behavior) {
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-    let streamedText = '';
+    let typewriter = null;
     let doneEvent = null;
     let errorMessage = null;
 
@@ -2160,9 +2211,9 @@ async function playTimeSkip(hint, behavior) {
             streaming = document.createElement('p');
             streaming.className = 'chapter-streaming';
             content.appendChild(streaming);
+            typewriter = createTypewriter(streaming);
           }
-          streamedText += event.text;
-          streaming.textContent = streamedText;
+          typewriter.push(event.text);
         } else if (event.type === 'done') {
           doneEvent = event;
         } else if (event.type === 'error') {
@@ -2173,6 +2224,7 @@ async function playTimeSkip(hint, behavior) {
 
     if (errorMessage) throw new Error(errorMessage);
     if (!doneEvent) throw new Error(t('illegibleResponse')(res.status));
+    if (typewriter) await typewriter.whenDrained();
     await refreshSave(true);
   } catch (e) {
     if (!(await attemptRecovery(updatedAtBefore))) {
@@ -2219,7 +2271,7 @@ async function playPov(character, hint) {
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-    let streamedText = '';
+    let typewriter = null;
     let doneEvent = null;
     let errorMessage = null;
 
@@ -2240,9 +2292,9 @@ async function playPov(character, hint) {
             streaming = document.createElement('p');
             streaming.className = 'chapter-streaming';
             content.appendChild(streaming);
+            typewriter = createTypewriter(streaming);
           }
-          streamedText += event.text;
-          streaming.textContent = streamedText;
+          typewriter.push(event.text);
         } else if (event.type === 'done') {
           doneEvent = event;
         } else if (event.type === 'error') {
@@ -2253,6 +2305,7 @@ async function playPov(character, hint) {
 
     if (errorMessage) throw new Error(errorMessage);
     if (!doneEvent) throw new Error(t('illegibleResponse')(res.status));
+    if (typewriter) await typewriter.whenDrained();
     await refreshSave(true);
   } catch (e) {
     if (!(await attemptRecovery(updatedAtBefore))) {
@@ -2369,7 +2422,7 @@ document.getElementById('regenerateConfirmBtn').onclick = async () => {
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-    let streamedText = '';
+    let typewriter = null;
     let doneEvent = null;
     let errorMessage = null;
 
@@ -2390,9 +2443,9 @@ document.getElementById('regenerateConfirmBtn').onclick = async () => {
             streaming = document.createElement('p');
             streaming.className = 'chapter-streaming';
             content.appendChild(streaming);
+            typewriter = createTypewriter(streaming);
           }
-          streamedText += event.text;
-          streaming.textContent = streamedText;
+          typewriter.push(event.text);
         } else if (event.type === 'done') {
           doneEvent = event;
         } else if (event.type === 'error') {
@@ -2403,6 +2456,7 @@ document.getElementById('regenerateConfirmBtn').onclick = async () => {
 
     if (errorMessage) throw new Error(errorMessage);
     if (!doneEvent) throw new Error(t('illegibleResponse')(res.status));
+    if (typewriter) await typewriter.whenDrained();
     await refreshSave(true);
   } catch (e) {
     if (!(await attemptRecovery(updatedAtBefore))) {

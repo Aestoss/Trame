@@ -1,5 +1,44 @@
 # Changelog
 
+## 2026-09-26 — Correctif : le texte streamé apparaissait d'un coup, pas mot par mot
+
+Retour : "It appears at once instead of word by word." Diagnostic : les
+quatre points d'entrée streaming côté client (`playAction`, `playTimeSkip`,
+`playPov`, la régénération) écrivaient chaque morceau reçu directement dans
+le DOM (`streaming.textContent = streamedText`), sans aucun lissage. Tant
+que le réseau livre les deltas à un rythme régulier ça passe inaperçu, mais
+ce n'est pas garanti : les modèles Claude actuels activent le raisonnement
+étendu ("thinking") par défaut, qui ne produit aucun texte visible pendant
+toute sa durée — un bug déjà rencontré et documenté en prod pour la création
+de monde (`providers/textProviders.js`, `streamAnthropic`/`callAnthropic` :
+le budget entier de `max_tokens` a déjà été consommé par le thinking avant
+qu'un seul caractère de texte visible n'arrive). Sur un tour normal, la
+conséquence est plus discrète mais bien réelle : une bonne partie du temps
+d'attente se passe en silence total, puis le texte visible arrive d'un
+coup sur les dernières secondes — perçu comme "pas du streaming du tout".
+
+- **`createTypewriter` (`public/app.js`)** : petite file d'attente qui
+  réabsorbe cet effet de rafale — chaque morceau reçu est mis en tampon et
+  révélé à l'écran par petits paquets sur une cadence régulière, indépendante
+  du rythme d'arrivée réseau. Le rattrapage est proportionnel à la taille du
+  tampon (rafale importante = rattrapage rapide en quelques centaines de ms,
+  petit reste = défilement caractère par caractère), donc l'effet "machine à
+  écrire" tient quel que soit le pattern de livraison en dessous. Les 4
+  points d'entrée (`playAction`, `playTimeSkip`, `playPov`, le bouton de
+  régénération) attendent maintenant `typewriter.whenDrained()` avant
+  d'appeler `refreshSave(true)`, pour ne jamais couper l'animation en cours
+  de route en la remplaçant par le rendu final.
+- Ce correctif ne touche à rien côté serveur ni aux appels IA eux-mêmes —
+  c'est un problème de présentation, pas de génération. La piste "supprimer
+  le thinking pour aller plus vite" a été envisagée puis écartée pour cette
+  session : le champ `thinking` n'a jamais été touché ici pour rester sûr,
+  indépendamment de la piste retenue ci-dessus.
+
+Vérifié avec le fournisseur mock + Playwright : la longueur du texte affiché
+progresse par paliers visibles (2 → 6 → 8 → 10 → ... → 87 caractères) au
+lieu de sauter directement à la valeur finale, texte final identique à
+avant (aucune troncature, aucune duplication), testé sur un tour normal.
+
 ## 2026-09-25 — Tenue vestimentaire par personnage (registre chronologique, comme les ellipses temporelles)
 
 Retour : l'IA perd le fil des vêtements/déguisements récents — un
