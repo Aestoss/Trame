@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026-11-20 — Correction de trajectoire : VM Always Free plutôt que Cloud Run, + guide de déploiement
+
+Demande : avancer sur le déploiement réel de la phase 1. En préparant ce
+déploiement, un vrai problème est apparu : Cloud Run n'a pas de disque local
+persistant, et ses deux options de stockage réseau ne passent pas les
+contraintes du projet (zéro coût, ne jamais casser) — Filestore coûte
+~150+$/mois minimum, et GCS FUSE ne garantit pas le verrouillage de fichiers
+dont SQLite a besoin (risque de corruption documenté par Google lui-même).
+
+- **Nouvelle cible retenue : une VM `e2-micro` sur le palier "Always Free"**
+  de Google Cloud — un vrai disque local (comme le conteneur Railway
+  actuel), $0/mois tant que l'usage reste sous les plafonds (1 instance
+  `e2-micro`/mois, 30 Go-mois de disque standard, 1 Go/mois de trafic
+  sortant), pas un essai limité dans le temps. Élimine aussi le risque du
+  hard problem 2 (rôles non attendus) à la racine, puisque la VM ne se met
+  jamais en veille — le correctif `Promise.all` déjà livré reste malgré
+  tout en place, gratuit et sans inconvénient.
+- **`deploy/GCE-DEPLOY.md`** (nouveau) : commandes `gcloud`/`docker` prêtes
+  à copier-coller pour créer la VM, l'exposer sur le port 80, cloner le
+  dépôt et lancer le conteneur avec `--restart unless-stopped`, plus un
+  script de redéploiement simple. Volontairement pensé pour être exécuté
+  par toi (avec tes propres identifiants `gcloud`) — cette session n'a pas
+  d'accès au compte Google Cloud et n'a donc rien déployé elle-même.
+- Le doc de scoping ("Trame: Railway to Firebase Migration Scope") a été
+  mis à jour en conséquence : mapping des services, section stockage, plan
+  de phases et comparatif de coûts reflètent maintenant la VM, pas Cloud Run.
+
 ## 2026-11-20 — Attendre les rôles Archivist/Proofreader/Mastermind (phase 1 de la migration Railway → Firebase/Cloud Run)
 
 Demande : rendre sûr le risque identifié dans le doc de scoping (hard problem
