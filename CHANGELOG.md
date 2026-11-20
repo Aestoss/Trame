@@ -1,5 +1,37 @@
 # Changelog
 
+## 2026-11-20 — Attendre les rôles Archivist/Proofreader/Mastermind (phase 1 de la migration Railway → Firebase/Cloud Run)
+
+Demande : rendre sûr le risque identifié dans le doc de scoping (hard problem
+2) avant le déploiement Cloud Run — avec trois contraintes explicites : zéro
+coût d'infra supplémentaire, les trois rôles doivent tourner en parallèle (pas
+l'un après l'autre), et ça ne doit jamais casser, pour un projet mono-joueur.
+
+- **`lib/gameEngine.js`** : `fireArchivist`/`fireProofreader`/`fireMastermind`
+  retournent maintenant leur promesse (déjà résolue, jamais rejetée, grâce à
+  leur `.catch()` existant) au lieu d'être de purs "fire-and-forget". Les 4
+  endroits qui les appellent (`playTurn`, `playTurnStreaming`,
+  `playTimeSkipStreaming`, `playPovTurnStreaming` — `regenerateTurn(Streaming)`
+  délègue aux deux premiers) attendent maintenant ces promesses avant de
+  répondre au joueur, via `Promise.all([...])` pour `playTurn`/
+  `playTurnStreaming` (les trois rôles tournent en parallèle entre eux, donc
+  le surcoût de latence est celui du plus lent des trois, pas leur somme — pas
+  un `await` séquentiel l'un après l'autre).
+- Pourquoi : sur Railway (conteneur toujours actif), laisser ces trois appels
+  continuer après la réponse ne posait aucun problème. Sur Cloud Run, rien ne
+  garantit que le process continue de tourner une fois la réponse envoyée,
+  sauf à payer pour que le CPU reste alloué en dehors des requêtes — ce qui
+  coûte en continu, à l'opposé de la contrainte "zéro coût" de ce projet. Ici,
+  zéro changement d'infra, zéro coût ajouté : juste attendre avant de répondre.
+- Contrepartie assumée : un tour prend maintenant un peu plus longtemps à
+  revenir (le temps du plus lent des trois rôles), au lieu de revenir
+  immédiatement et de laisser le travail continuer en arrière-plan.
+- **Vérifié** en local et dans le conteneur Docker de la phase 0 (provider
+  `mock`) : un tour joué via `/turn/stream`, puis lecture de `trame.db`
+  **immédiatement** après l'événement `done` (sans aucune pause) — la ligne
+  `mastermindPlans` existe déjà, alors qu'avant ce changement elle n'était
+  écrite qu'après coup, de façon non garantie.
+
 ## 2026-11-20 — Conteneurisation (phase 0 de la migration Railway → Firebase/Cloud Run)
 
 Demande : scoper puis commencer la migration hors Railway vers Firebase ;
