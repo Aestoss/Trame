@@ -1,5 +1,36 @@
 # Changelog
 
+## 2026-11-20 — Conteneurisation (phase 0 de la migration Railway → Firebase/Cloud Run)
+
+Demande : scoper puis commencer la migration hors Railway vers Firebase ;
+phase 0 = conteneuriser l'app et vérifier qu'un tour complet fonctionne dans
+le conteneur avant de toucher à quoi que ce soit côté Google Cloud.
+
+- **`Dockerfile`** (nouveau) : image `node:22-bookworm-slim` (via le miroir
+  `mirror.gcr.io`, Docker Hub limitant les pulls anonymes), qui lit déjà
+  `process.env.PORT` (`server.js`) donc compatible Cloud Run tel quel.
+  `better-sqlite3` et `sqlite-vec` utilisent des binaires précompilés pour
+  linux-x64/Node 22 — confirmé par un `npm ci` propre et un `require()` réussi
+  des deux sur cette plateforme, donc aucune chaîne de compilation
+  (python3/make/g++) n'est nécessaire dans l'image finale.
+- Particularité de cet environnement de dev (pas un problème Cloud Run) :
+  les conteneurs ici n'ont pas d'accès réseau sortant (ni vers le registre
+  npm, ni vers deb.debian.org), donc le Dockerfile copie un `node_modules`
+  installé côté hôte plutôt que de lancer `npm ci` pendant le build. À
+  remplacer par un vrai `RUN npm ci --omit=dev` dans l'image dès qu'un
+  pipeline CI avec accès réseau normal est en place.
+- **Test de bout en bout réalisé** : conteneur lancé avec un volume monté sur
+  `/data` et le provider `mock`, création d'un monde, sélection d'un
+  personnage, puis un tour joué via `/api/saves/:id/turn/stream`. Le tour
+  s'est streamé et terminé correctement, et les trois rôles non attendus par
+  le serveur (Archivist/Proofreader/Mastermind, voir `gameEngine.js`) se sont
+  bien exécutés après la réponse — confirmé en lisant `trame.db` directement
+  dans le conteneur (`mastermindPlans` a bien une ligne, `proofreaderFlags`
+  n'en a logiquement aucune pour ce tour trivial). Ce test valide le
+  conteneur lui-même ; il ne teste pas encore le risque spécifique à Cloud
+  Run (gel de l'instance après la réponse en scale-to-zero), qui reste à
+  vérifier en phase 1 une fois déployé sur Cloud Run.
+
 ## 2026-09-26 — Export de l'histoire complète en PDF
 
 Demande : pouvoir extraire toute l'histoire d'une sauvegarde dans un PDF (ou

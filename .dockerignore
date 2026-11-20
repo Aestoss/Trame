@@ -1,0 +1,9 @@
+data
+.env
+npm-debug.log
+.git
+.gitignore
+scripts/windows
+docs
+CHANGELOG.md
+README.md
