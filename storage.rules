@@ -1,0 +1,10 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Same reasoning as firestore.rules -- only the server, via
+    // firebase-admin, ever touches this bucket.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

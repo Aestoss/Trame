@@ -69,9 +69,9 @@ async function retrieveRelevantFacts({ saveId, queryText, forwardEmbedding, char
   // merged and deduped by id, then capped to `limit` once -- adding the
   // forward query widens the pool that gets ranked down to one bounded
   // result, it never adds a second uncapped bucket on top of the first.
-  function mergedSearch(character) {
-    const backward = embedding ? db.searchMemoryFactsByEmbedding({ saveId, embedding, k: limit, character, viewerCharacter, omniscient }) : [];
-    const forward = forwardEmbedding ? db.searchMemoryFactsByEmbedding({ saveId, embedding: forwardEmbedding, k: limit, character, viewerCharacter, omniscient }) : [];
+  async function mergedSearch(character) {
+    const backward = embedding ? await db.searchMemoryFactsByEmbedding({ saveId, embedding, k: limit, character, viewerCharacter, omniscient }) : [];
+    const forward = forwardEmbedding ? await db.searchMemoryFactsByEmbedding({ saveId, embedding: forwardEmbedding, k: limit, character, viewerCharacter, omniscient }) : [];
     const seen = new Set();
     const merged = [];
     for (const fact of [...backward, ...forward]) {
@@ -82,10 +82,10 @@ async function retrieveRelevantFacts({ saveId, queryText, forwardEmbedding, char
     return merged.slice(0, limit);
   }
 
-  const memoryFacts = mergedSearch(null);
+  const memoryFacts = await mergedSearch(null);
   const factsByCharacter = {};
   for (const name of characterNames || []) {
-    const rows = mergedSearch(name);
+    const rows = await mergedSearch(name);
     if (rows.length) factsByCharacter[name] = rows.map(r => r.fact);
   }
   return { memoryFacts, factsByCharacter };

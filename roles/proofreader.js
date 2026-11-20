@@ -42,7 +42,7 @@ async function checkChapter({ worldId, saveId, turnNumber, chapterText, storyClo
       provider, system, user, apiKey, model, baseUrl
     });
     raw = result.text;
-    recordCost({ worldId, saveId, kind: 'proofreader', provider, model, usage: result.usage });
+    await recordCost({ worldId, saveId, kind: 'proofreader', provider, model, usage: result.usage });
   } catch (e) {
     // Never surfaces anywhere the player can see, same reasoning as the
     // Archivist's own catch below it: the chapter they read was already
@@ -70,7 +70,7 @@ async function checkChapter({ worldId, saveId, turnNumber, chapterText, storyClo
   for (const c of contradictions) {
     if (!c || typeof c.summary !== 'string' || !c.summary.trim()) continue;
     const type = c.type === 'fact' ? 'fact' : 'pacing';
-    db.get('proofreaderFlags').push({
+    await db.get('proofreaderFlags').push({
       id: uuid(),
       saveId,
       turnNumber,

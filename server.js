@@ -24,16 +24,26 @@ const {
 } = require('./lib/gameEngine');
 const { getTotalCosts, getWorldCosts } = require('./lib/costTracker');
 const { writeStoryPdf } = require('./lib/exportStory');
+const { streamImage } = require('./lib/storage');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
-// Locally-generated images are written to disk under DATA_DIR/images (see
-// providers/imageProviders.js) instead of stored inline as base64 in
-// the database -- served from the same persistent volume the database lives on,
-// not from the app bundle, so they survive deploys.
-app.use('/images', express.static(path.join(process.env.DATA_DIR || path.join(__dirname, 'data'), 'images')));
+// Locally-generated images live in Cloud Storage (see providers/imageProviders.js
+// and lib/storage.js) instead of stored inline as base64 in the database or
+// written to Cloud Run's own ephemeral local disk, which doesn't persist
+// across deploys. The URL shape (/images/<file>) is unchanged from the old
+// express.static version, so nothing stored in Firestore needed to change.
+app.get('/images/:filename', async (req, res) => {
+  try {
+    const found = await streamImage(req.params.filename, res);
+    if (!found) res.status(404).end();
+  } catch (e) {
+    console.error(e);
+    res.status(500).end();
+  }
+});
 
 // secretInfo is deliberately hidden state (see docs/INFINITE_WORLDS_REFERENCE.md,
 // Phase E) — strip it before any save object reaches the client. Returns a
@@ -44,18 +54,18 @@ function publicSave(save) {
   return rest;
 }
 
-function worldPlayableCharacters(worldId) {
-  return db.get('playableCharacters').filter({ worldId }).value();
+async function worldPlayableCharacters(worldId) {
+  return (await db.get('playableCharacters').filter({ worldId })).value();
 }
 
-function worldPublicTrackedItemDefs(worldId) {
+async function worldPublicTrackedItemDefs(worldId) {
   // ai_only tracked items are deliberately withheld from the client — that's
   // the whole point of the visibility flag (hidden state, e.g. a secret plot flag).
   // Used by any endpoint reachable from a player-facing flow (e.g. right
   // before character selection) — the world editor's own tracked-items
   // section fetches the unfiltered list separately (GET .../tracked-items),
   // since an author obviously needs to see what they're marking hidden.
-  return db.get('trackedItemDefs').filter({ worldId, visibility: 'player_and_ai' }).value();
+  return (await db.get('trackedItemDefs').filter({ worldId, visibility: 'player_and_ai' })).value();
 }
 
 // Turns carry a full state snapshot (see gameEngine.captureSnapshot) so a
@@ -76,18 +86,23 @@ function publicTurn(turn, { debug, itemDefs }) {
 
 // ---------- Worlds (reusable templates) ----------
 
-app.get('/api/worlds', (req, res) => {
-  const worlds = db.get('worlds').value();
-  res.json(worlds.map(w => ({ ...w, saveCount: db.get('saves').filter({ worldId: w.id }).size().value() })));
+app.get('/api/worlds', async (req, res) => {
+  const worlds = await db.get('worlds').value();
+  const list = [];
+  for (const w of worlds) {
+    const saveCount = (await db.get('saves').filter({ worldId: w.id })).value().length;
+    list.push({ ...w, saveCount });
+  }
+  res.json(list);
 });
 
-app.get('/api/worlds/:id', (req, res) => {
+app.get('/api/worlds/:id', async (req, res) => {
   try {
-    const world = getWorld(req.params.id);
+    const world = await getWorld(req.params.id);
     res.json({
       world,
-      playableCharacters: worldPlayableCharacters(world.id),
-      trackedItemDefs: worldPublicTrackedItemDefs(world.id)
+      playableCharacters: await worldPlayableCharacters(world.id),
+      trackedItemDefs: await worldPublicTrackedItemDefs(world.id)
     });
   } catch (e) {
     res.status(404).json({ error: e.message });
@@ -138,7 +153,7 @@ app.post('/api/worlds/stream', async (req, res) => {
   }
 });
 
-app.patch('/api/worlds/:id', (req, res) => {
+app.patch('/api/worlds/:id', async (req, res) => {
   try {
     const {
       title, instructions, authorStyle, imageStyle, imageStylePrefix, imageStyleSuffix, imageModel,
@@ -146,7 +161,7 @@ app.patch('/api/worlds/:id', (req, res) => {
       setting, tone, rules, skills, victoryCondition, victoryText, defeatCondition, defeatText,
       characterSelectText, designNotes
     } = req.body;
-    const world = updateWorld(req.params.id, {
+    const world = await updateWorld(req.params.id, {
       title, instructions, authorStyle, imageStyle, imageStylePrefix, imageStyleSuffix, imageModel,
       description, objective, background, firstAction, mature, contentWarnings,
       setting, tone, rules, skills, victoryCondition, victoryText, defeatCondition, defeatText,
@@ -193,19 +208,19 @@ app.post('/api/worlds/:id/cover/preview', async (req, res) => {
   }
 });
 
-app.post('/api/worlds/:id/cover/accept', (req, res) => {
+app.post('/api/worlds/:id/cover/accept', async (req, res) => {
   try {
     const { imageUrl, prompt } = req.body;
-    const world = acceptWorldCover(req.params.id, imageUrl, prompt);
+    const world = await acceptWorldCover(req.params.id, imageUrl, prompt);
     res.json({ ok: true, world });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
 });
 
-app.delete('/api/worlds/:id', (req, res) => {
+app.delete('/api/worlds/:id', async (req, res) => {
   try {
-    deleteWorld(req.params.id);
+    await deleteWorld(req.params.id);
     res.json({ ok: true });
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -238,19 +253,19 @@ app.post('/api/worlds/:id/characters/generate', async (req, res) => {
   }
 });
 
-app.patch('/api/worlds/:worldId/characters/:characterId', (req, res) => {
+app.patch('/api/worlds/:worldId/characters/:characterId', async (req, res) => {
   try {
     const { name, description, appearance, skills, initialTrackedItemValues } = req.body;
-    const character = updateCharacter(req.params.worldId, req.params.characterId, { name, description, appearance, skills, initialTrackedItemValues });
+    const character = await updateCharacter(req.params.worldId, req.params.characterId, { name, description, appearance, skills, initialTrackedItemValues });
     res.json({ ok: true, character });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
 });
 
-app.delete('/api/worlds/:worldId/characters/:characterId', (req, res) => {
+app.delete('/api/worlds/:worldId/characters/:characterId', async (req, res) => {
   try {
-    deleteCharacter(req.params.worldId, req.params.characterId);
+    await deleteCharacter(req.params.worldId, req.params.characterId);
     res.json({ ok: true });
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -277,10 +292,10 @@ app.post('/api/worlds/:worldId/characters/:characterId/portrait/preview', async 
   }
 });
 
-app.post('/api/worlds/:worldId/characters/:characterId/portrait/accept', (req, res) => {
+app.post('/api/worlds/:worldId/characters/:characterId/portrait/accept', async (req, res) => {
   try {
     const { imageUrl, prompt } = req.body;
-    const character = acceptCharacterPortrait(req.params.worldId, req.params.characterId, imageUrl, prompt);
+    const character = await acceptCharacterPortrait(req.params.worldId, req.params.characterId, imageUrl, prompt);
     res.json({ ok: true, character });
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -291,38 +306,38 @@ app.post('/api/worlds/:worldId/characters/:characterId/portrait/accept', (req, r
 // Unfiltered on purpose — this is the author-only editor list, distinct
 // from worldPublicTrackedItemDefs used in any player-facing response.
 
-app.get('/api/worlds/:id/tracked-items', (req, res) => {
+app.get('/api/worlds/:id/tracked-items', async (req, res) => {
   try {
-    getWorld(req.params.id);
-    res.json(db.get('trackedItemDefs').filter({ worldId: req.params.id }).value());
+    await getWorld(req.params.id);
+    res.json((await db.get('trackedItemDefs').filter({ worldId: req.params.id })).value());
   } catch (e) {
     res.status(404).json({ error: e.message });
   }
 });
 
-app.post('/api/worlds/:id/tracked-items', (req, res) => {
+app.post('/api/worlds/:id/tracked-items', async (req, res) => {
   try {
     const { name, dataType, description, visibility, updateAutomatically, updateInstructions, initialValue } = req.body;
-    const item = addTrackedItem(req.params.id, { name, dataType, description, visibility, updateAutomatically, updateInstructions, initialValue });
+    const item = await addTrackedItem(req.params.id, { name, dataType, description, visibility, updateAutomatically, updateInstructions, initialValue });
     res.json({ ok: true, item });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
 });
 
-app.patch('/api/worlds/:worldId/tracked-items/:itemId', (req, res) => {
+app.patch('/api/worlds/:worldId/tracked-items/:itemId', async (req, res) => {
   try {
     const { name, dataType, description, visibility, updateAutomatically, updateInstructions, initialValue } = req.body;
-    const item = updateTrackedItem(req.params.worldId, req.params.itemId, { name, dataType, description, visibility, updateAutomatically, updateInstructions, initialValue });
+    const item = await updateTrackedItem(req.params.worldId, req.params.itemId, { name, dataType, description, visibility, updateAutomatically, updateInstructions, initialValue });
     res.json({ ok: true, item });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
 });
 
-app.delete('/api/worlds/:worldId/tracked-items/:itemId', (req, res) => {
+app.delete('/api/worlds/:worldId/tracked-items/:itemId', async (req, res) => {
   try {
-    deleteTrackedItem(req.params.worldId, req.params.itemId);
+    await deleteTrackedItem(req.params.worldId, req.params.itemId);
     res.json({ ok: true });
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -331,38 +346,38 @@ app.delete('/api/worlds/:worldId/tracked-items/:itemId', (req, res) => {
 
 // ---------- NPCs (world templates) ----------
 
-app.get('/api/worlds/:id/npcs', (req, res) => {
+app.get('/api/worlds/:id/npcs', async (req, res) => {
   try {
-    getWorld(req.params.id);
-    res.json(db.get('worldNpcs').filter({ worldId: req.params.id }).value());
+    await getWorld(req.params.id);
+    res.json((await db.get('worldNpcs').filter({ worldId: req.params.id })).value());
   } catch (e) {
     res.status(404).json({ error: e.message });
   }
 });
 
-app.post('/api/worlds/:id/npcs', (req, res) => {
+app.post('/api/worlds/:id/npcs', async (req, res) => {
   try {
     const { name, role, detail, oneLiner, appearance, location } = req.body;
-    const npc = addNpc(req.params.id, { name, role, detail, oneLiner, appearance, location });
+    const npc = await addNpc(req.params.id, { name, role, detail, oneLiner, appearance, location });
     res.json({ ok: true, npc });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
 });
 
-app.patch('/api/worlds/:worldId/npcs/:npcId', (req, res) => {
+app.patch('/api/worlds/:worldId/npcs/:npcId', async (req, res) => {
   try {
     const { name, role, detail, oneLiner, appearance, location } = req.body;
-    const npc = updateNpc(req.params.worldId, req.params.npcId, { name, role, detail, oneLiner, appearance, location });
+    const npc = await updateNpc(req.params.worldId, req.params.npcId, { name, role, detail, oneLiner, appearance, location });
     res.json({ ok: true, npc });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
 });
 
-app.delete('/api/worlds/:worldId/npcs/:npcId', (req, res) => {
+app.delete('/api/worlds/:worldId/npcs/:npcId', async (req, res) => {
   try {
-    deleteNpc(req.params.worldId, req.params.npcId);
+    await deleteNpc(req.params.worldId, req.params.npcId);
     res.json({ ok: true });
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -371,70 +386,72 @@ app.delete('/api/worlds/:worldId/npcs/:npcId', (req, res) => {
 
 // ---------- Saves (one playthrough of a world) ----------
 
-app.get('/api/saves', (req, res) => {
-  const saves = db.get('saves').value();
-  const list = saves.map(s => {
-    const world = db.get('worlds').find({ id: s.worldId }).value();
-    const lastTurn = db.get('turns').filter({ saveId: s.id }).sortBy('turnNumber').last().value();
-    return {
+app.get('/api/saves', async (req, res) => {
+  const saves = await db.get('saves').value();
+  const list = [];
+  for (const s of saves) {
+    const world = (await db.get('worlds').find({ id: s.worldId })).value();
+    const saveTurns = (await db.get('turns').filter({ saveId: s.id })).sortBy('turnNumber');
+    const lastTurn = saveTurns.last().value();
+    list.push({
       ...publicSave(s),
       worldTitle: world ? world.title : '(monde supprimé)',
       worldTone: world ? world.tone : '',
       coverImageUrl: world ? world.coverImageUrl : null,
-      turnCount: db.get('turns').filter({ saveId: s.id }).size().value(),
+      turnCount: saveTurns.size().value(),
       lastAction: lastTurn ? lastTurn.playerAction : null
-    };
-  });
+    });
+  }
   res.json(list);
 });
 
-app.get('/api/saves/:id/export.pdf', (req, res) => {
+app.get('/api/saves/:id/export.pdf', async (req, res) => {
   try {
-    const save = getSave(req.params.id);
-    const world = getWorld(save.worldId);
-    const turns = db.get('turns').filter({ saveId: save.id }).sortBy('turnNumber').value();
-    const character = db.get('playableCharacters').find({ id: save.activeCharacterId }).value() || null;
+    const save = await getSave(req.params.id);
+    const world = await getWorld(save.worldId);
+    const turns = (await db.get('turns').filter({ saveId: save.id })).sortBy('turnNumber').value();
+    const character = (await db.get('playableCharacters').find({ id: save.activeCharacterId })).value() || null;
     writeStoryPdf(res, { world, character, turns });
   } catch (e) {
     res.status(404).json({ error: e.message });
   }
 });
 
-app.post('/api/worlds/:id/saves', (req, res) => {
+app.post('/api/worlds/:id/saves', async (req, res) => {
   try {
-    const result = createSave(req.params.id);
-    const itemDefs = db.get('trackedItemDefs').filter({ worldId: req.params.id }).value();
+    const result = await createSave(req.params.id);
+    const itemDefs = (await db.get('trackedItemDefs').filter({ worldId: req.params.id })).value();
     res.json({ save: publicSave(result.save), openingTurn: publicTurn(result.openingTurn, { debug: false, itemDefs }) });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
 });
 
-app.get('/api/saves/:id', (req, res) => {
+app.get('/api/saves/:id', async (req, res) => {
   try {
     const debug = req.query.debug === '1' || req.query.debug === 'true';
-    const save = getSave(req.params.id);
-    const world = getWorld(save.worldId);
-    const itemDefs = db.get('trackedItemDefs').filter({ worldId: world.id }).value();
-    const turns = db.get('turns').filter({ saveId: save.id }).sortBy('turnNumber').value()
+    const save = await getSave(req.params.id);
+    const world = await getWorld(save.worldId);
+    const itemDefs = (await db.get('trackedItemDefs').filter({ worldId: world.id })).value();
+    const turns = (await db.get('turns').filter({ saveId: save.id })).sortBy('turnNumber').value()
       .map(t => publicTurn(t, { debug, itemDefs }));
     // The "frise chronologique" (see the time-skip mechanic): every past
     // skip in this save, for the pagination UI to badge the turn it
     // happened on. Refreshed on every reload of the save, including right
     // after a streamed turn completes (see app.js's refreshSave), so a
     // skip appears the moment it's recorded.
-    const timelineEvents = db.get('timelineEvents').filter({ saveId: save.id }).sortBy('turnNumber').value();
+    const timelineEvents = (await db.get('timelineEvents').filter({ saveId: save.id })).sortBy('turnNumber').value();
     // Lean on purpose (no status/appearance/location/facts -- author-only
     // detail, not needed client-side): just enough for the POV picker (see
     // the POV mechanic) to list who the player can switch perspective to.
-    const saveCharacters = db.get('saveCharacters').filter({ saveId: save.id }).value()
+    const saveCharacters = (await db.get('saveCharacters').filter({ saveId: save.id })).value()
       .map(c => ({ id: c.id, name: c.name, role: c.role, oneLiner: c.oneLiner }));
     // The Proofreader's pacing-contradiction flags (see roles/proofreader.js,
     // Milestone 3): author-mode-only, same treatment as secretInfo above --
     // never sent to a non-debug request, since these are meant for the
     // author to judge, not something the player should see mid-story.
     const proofreaderFlags = debug
-      ? db.get('proofreaderFlags').filter({ saveId: save.id }).sortBy('turnNumber').value()
+      ? (await db.get('proofreaderFlags').filter({ saveId: save.id })).sortBy('turnNumber').value()
       : [];
     // The Mastermind's hidden plan (see roles/mastermind.js, Milestone 3) was
     // never surfaced anywhere in the app before -- same author-only treatment
@@ -443,14 +460,14 @@ app.get('/api/saves/:id', (req, res) => {
     // `embedding` (a 768-float array, feedback item #1's forward-query
     // vector) before it reaches the client -- useless there and needlessly
     // bloats the response.
-    const rawMastermindPlan = debug ? getActiveMastermindPlan(save.id) : null;
+    const rawMastermindPlan = debug ? await getActiveMastermindPlan(save.id) : null;
     const mastermindPlan = rawMastermindPlan ? (({ embedding, ...rest }) => rest)(rawMastermindPlan) : null;
-    const playableCharacters = worldPlayableCharacters(world.id);
+    const playableCharacters = await worldPlayableCharacters(world.id);
     // The MC's current outfit (see lib/characterOutfits.js) -- not hidden
     // state like secretInfo/mastermindPlan above, just descriptive flavor,
     // so sent on every request rather than gated to debug=1.
     const activePlayableCharacter = playableCharacters.find(c => c.id === save.activeCharacterId);
-    const mcOutfit = activePlayableCharacter ? getCurrentOutfit(save.id, activePlayableCharacter.name) : null;
+    const mcOutfit = activePlayableCharacter ? await getCurrentOutfit(save.id, activePlayableCharacter.name) : null;
     res.json({
       save: debug ? save : publicSave(save),
       world,
@@ -459,7 +476,7 @@ app.get('/api/saves/:id', (req, res) => {
       saveCharacters,
       proofreaderFlags,
       mastermindPlan,
-      storyClock: getStoryClock(save.id),
+      storyClock: await getStoryClock(save.id),
       mcOutfit: mcOutfit ? mcOutfit.description : null,
       playableCharacters
     });
@@ -468,9 +485,9 @@ app.get('/api/saves/:id', (req, res) => {
   }
 });
 
-app.delete('/api/saves/:id', (req, res) => {
+app.delete('/api/saves/:id', async (req, res) => {
   try {
-    deleteSave(req.params.id);
+    await deleteSave(req.params.id);
     res.json({ ok: true });
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -481,9 +498,9 @@ app.delete('/api/saves/:id', (req, res) => {
 // pruneOldTurnImages in gameEngine.js) already keeps only the last 10, but
 // an author who wants to reclaim space right away shouldn't have to wait
 // for that many more turns to cycle it out.
-app.post('/api/saves/:id/purge-images', (req, res) => {
+app.post('/api/saves/:id/purge-images', async (req, res) => {
   try {
-    const result = purgeSaveImages(req.params.id);
+    const result = await purgeSaveImages(req.params.id);
     res.json(result);
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -496,29 +513,29 @@ app.post('/api/saves/:id/purge-images', (req, res) => {
 // The response body is deliberately just an ack; the point is what lands
 // in the log, readable from Railway without any way to query the live
 // database directly.
-app.post('/api/saves/:id/debug-dump', (req, res) => {
+app.post('/api/saves/:id/debug-dump', async (req, res) => {
   try {
-    logDebugSnapshot(req.params.id);
+    await logDebugSnapshot(req.params.id);
     res.json({ ok: true });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
 });
 
-app.post('/api/saves/:id/select-character', (req, res) => {
+app.post('/api/saves/:id/select-character', async (req, res) => {
   try {
     const { characterId } = req.body;
     if (!characterId) return res.status(400).json({ error: 'characterId is required' });
-    const character = selectCharacter(req.params.id, characterId);
+    const character = await selectCharacter(req.params.id, characterId);
     res.json({ ok: true, character });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
 });
 
-app.post('/api/saves/:id/continue', (req, res) => {
+app.post('/api/saves/:id/continue', async (req, res) => {
   try {
-    const save = continueAfterVictory(req.params.id);
+    const save = await continueAfterVictory(req.params.id);
     res.json({ ok: true, save: publicSave(save) });
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -529,13 +546,13 @@ app.post('/api/saves/:id/turn', async (req, res) => {
   try {
     const { action, authorMode, authorNote, debug, providerOverride } = req.body;
     if (!action || !action.trim()) return res.status(400).json({ error: 'action is required' });
-    const save = getSave(req.params.id);
+    const save = await getSave(req.params.id);
     const turn = await playTurn(req.params.id, action.trim(), {
       authorMode: Boolean(authorMode),
       authorNote: authorNote && authorNote.trim() ? authorNote.trim() : undefined,
       providerOverride
     });
-    const itemDefs = db.get('trackedItemDefs').filter({ worldId: save.worldId }).value();
+    const itemDefs = (await db.get('trackedItemDefs').filter({ worldId: save.worldId })).value();
     res.json(publicTurn(turn, { debug: Boolean(debug), itemDefs }));
   } catch (e) {
     console.error(e);
@@ -562,14 +579,14 @@ app.post('/api/saves/:id/turn/stream', async (req, res) => {
   const send = (event) => res.write(JSON.stringify(event) + '\n');
 
   try {
-    const save = getSave(req.params.id);
+    const save = await getSave(req.params.id);
     const turn = await playTurnStreaming(req.params.id, action.trim(), {
       authorMode: Boolean(authorMode),
       authorNote: authorNote && authorNote.trim() ? authorNote.trim() : undefined,
       providerOverride,
       onChapterChunk: (text) => send({ type: 'chunk', text })
     });
-    const itemDefs = db.get('trackedItemDefs').filter({ worldId: save.worldId }).value();
+    const itemDefs = (await db.get('trackedItemDefs').filter({ worldId: save.worldId })).value();
     send({ type: 'done', turn: publicTurn(turn, { debug: Boolean(debug), itemDefs }) });
   } catch (e) {
     console.error(e);
@@ -598,12 +615,12 @@ app.post('/api/saves/:id/time-skip/stream', async (req, res) => {
   const send = (event) => res.write(JSON.stringify(event) + '\n');
 
   try {
-    const save = getSave(req.params.id);
+    const save = await getSave(req.params.id);
     const turn = await playTimeSkipStreaming(req.params.id, hint, behavior, {
       providerOverride,
       onChapterChunk: (text) => send({ type: 'chunk', text })
     });
-    const itemDefs = db.get('trackedItemDefs').filter({ worldId: save.worldId }).value();
+    const itemDefs = (await db.get('trackedItemDefs').filter({ worldId: save.worldId })).value();
     send({ type: 'done', turn: publicTurn(turn, { debug: Boolean(debug), itemDefs }) });
   } catch (e) {
     console.error(e);
@@ -634,12 +651,12 @@ app.post('/api/saves/:id/pov/stream', async (req, res) => {
   const send = (event) => res.write(JSON.stringify(event) + '\n');
 
   try {
-    const save = getSave(req.params.id);
+    const save = await getSave(req.params.id);
     const turn = await playPovTurnStreaming(req.params.id, character.trim(), hint, {
       providerOverride,
       onChapterChunk: (text) => send({ type: 'chunk', text })
     });
-    const itemDefs = db.get('trackedItemDefs').filter({ worldId: save.worldId }).value();
+    const itemDefs = (await db.get('trackedItemDefs').filter({ worldId: save.worldId })).value();
     send({ type: 'done', turn: publicTurn(turn, { debug: Boolean(debug), itemDefs }) });
   } catch (e) {
     console.error(e);
@@ -653,9 +670,9 @@ app.post('/api/saves/:id/turns/:turnNumber/regenerate', async (req, res) => {
   try {
     const { action, note, debug, providerOverride } = req.body;
     const turnNumber = Number(req.params.turnNumber);
-    const save = getSave(req.params.id);
+    const save = await getSave(req.params.id);
     const turn = await regenerateTurn(req.params.id, turnNumber, { action, note, providerOverride });
-    const itemDefs = db.get('trackedItemDefs').filter({ worldId: save.worldId }).value();
+    const itemDefs = (await db.get('trackedItemDefs').filter({ worldId: save.worldId })).value();
     res.json(publicTurn(turn, { debug: Boolean(debug), itemDefs }));
   } catch (e) {
     console.error(e);
@@ -677,12 +694,12 @@ app.post('/api/saves/:id/turns/:turnNumber/regenerate/stream', async (req, res) 
   const send = (event) => res.write(JSON.stringify(event) + '\n');
 
   try {
-    const save = getSave(req.params.id);
+    const save = await getSave(req.params.id);
     const turn = await regenerateTurnStreaming(req.params.id, turnNumber, {
       action, note, providerOverride,
       onChapterChunk: (text) => send({ type: 'chunk', text })
     });
-    const itemDefs = db.get('trackedItemDefs').filter({ worldId: save.worldId }).value();
+    const itemDefs = (await db.get('trackedItemDefs').filter({ worldId: save.worldId })).value();
     send({ type: 'done', turn: publicTurn(turn, { debug: Boolean(debug), itemDefs }) });
   } catch (e) {
     console.error(e);
@@ -692,11 +709,11 @@ app.post('/api/saves/:id/turns/:turnNumber/regenerate/stream', async (req, res) 
   }
 });
 
-app.post('/api/saves/:id/rewind', (req, res) => {
+app.post('/api/saves/:id/rewind', async (req, res) => {
   try {
     const { turnNumber } = req.body;
     if (typeof turnNumber !== 'number') return res.status(400).json({ error: 'turnNumber is required' });
-    const save = rewindToTurn(req.params.id, turnNumber);
+    const save = await rewindToTurn(req.params.id, turnNumber);
     res.json({ ok: true, save: publicSave(save) });
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -705,18 +722,18 @@ app.post('/api/saves/:id/rewind', (req, res) => {
 
 // ---------- Costs ----------
 
-app.get('/api/costs', (req, res) => {
-  res.json(getTotalCosts());
+app.get('/api/costs', async (req, res) => {
+  res.json(await getTotalCosts());
 });
 
-app.get('/api/worlds/:id/costs', (req, res) => {
-  res.json(getWorldCosts(req.params.id));
+app.get('/api/worlds/:id/costs', async (req, res) => {
+  res.json(await getWorldCosts(req.params.id));
 });
 
 // ---------- Settings ----------
 
-app.get('/api/settings', (req, res) => {
-  const settings = getSettings();
+app.get('/api/settings', async (req, res) => {
+  const settings = await getSettings();
   // Never send raw keys back to the client — only whether each is set.
   const safe = {
     ...settings,
@@ -726,8 +743,8 @@ app.get('/api/settings', (req, res) => {
   res.json(safe);
 });
 
-app.post('/api/settings', (req, res) => {
-  const current = db.get('settings').value();
+app.post('/api/settings', async (req, res) => {
+  const current = await db.get('settings').value();
   const {
     textProvider, textModel, ollamaBaseUrl, fallbackProvider, fallbackModel,
     language, chapterLength, imageProvider, imageModel, imagesEnabled, localImageBaseUrl,
@@ -758,7 +775,7 @@ app.post('/api/settings', (req, res) => {
     // see lib/backgroundModel.js. Only field here is the key itself.
     backgroundModel: { ...current.backgroundModel, ...(backgroundModel || {}) }
   };
-  db.set('settings', next).write();
+  await db.set('settings', next).write();
   res.json({ ok: true });
 });
 

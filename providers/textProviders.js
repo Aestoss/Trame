@@ -540,6 +540,7 @@ async function callMock({ system, user }) {
   const isArchivist = /You extract structured facts from a single chapter/.test(system || '');
   const isProofreader = /You are a continuity checker/.test(system || '');
   const isMastermind = /hidden Mastermind behind/.test(system || '');
+  const isSupersede = /You are a continuity archivist/.test(system || '');
 
   if (isPov) {
     const povCharacterName = povMatch[1];
@@ -710,6 +711,11 @@ async function callMock({ system, user }) {
 
   if (isArchivist) {
     const tookLantern = /take the lantern/i.test(user);
+    // Same "fact test" trigger isProofreader already keys off of (see
+    // below) -- here it's the Archivist's turn to actually write the new,
+    // contradicting fact, so roles/supersede.js has two similar real facts
+    // on record to compare and something to mark superseded.
+    const firstDay = /first day/i.test(user);
     // The POV mechanic's knowledge wall (see buildArchivistMasterPrompt's
     // "KNOWN BY" section): a POV-scene chapter tags its own facts as known
     // only by the POV character, never the (absent) player character --
@@ -734,11 +740,32 @@ async function callMock({ system, user }) {
       text: JSON.stringify({
         new_facts: povCharacterName
           ? [{ fact: `${povCharacterName} noticed something they haven't told anyone.`, character: povCharacterName, type: 'plot', known_by: [povCharacterName] }]
-          : tookLantern ? [{ fact: 'Keeper Oduya has tended the lighthouse for eleven years.', character: 'Keeper Oduya', type: 'biographical', known_by: null }] : [],
+          : tookLantern ? [{ fact: 'Keeper Oduya has tended the lighthouse for eleven years.', character: 'Keeper Oduya', type: 'biographical', known_by: null }]
+          : firstDay ? [{ fact: 'Keeper Oduya said today is her very first day at the lighthouse.', character: 'Keeper Oduya', type: 'biographical', known_by: null }] : [],
         outfit_changes: (disguised && firstCharacterName)
           ? [{ character: firstCharacterName, description: 'a dockworker\'s patched coat and cap, collar turned up to hide the face', reason: 'disguised to slip past the Keeper\'s watchmen' }]
           : []
       })
+    };
+  }
+  if (isSupersede) {
+    // See roles/supersede.js's buildSupersedePrompt: the user message lists
+    // the new fact's text, then each candidate as "- id: X\n  fact: Y".
+    // Mirrors isProofreader's "eleven years" + "first day" pairing just
+    // above, but deciding fact-vs-fact instead of chapter-vs-fact.
+    const newFactMatch = user.match(/NEW FACT JUST RECORDED\n([^\n]+)/);
+    const newFactText = newFactMatch ? newFactMatch[1] : '';
+    const supersededIds = [];
+    if (/first day/i.test(newFactText)) {
+      const candidateRe = /- id: (\S+)\n {2}fact: ([^\n]+)/g;
+      let m;
+      while ((m = candidateRe.exec(user))) {
+        if (/eleven years/i.test(m[2])) supersededIds.push(m[1]);
+      }
+    }
+    return {
+      usage: noUsage,
+      text: JSON.stringify({ superseded_ids: supersededIds })
     };
   }
   if (/\bwin\b/i.test(action)) {

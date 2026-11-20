@@ -107,15 +107,17 @@ Variables d'environnement optionnelles (voir `.env.example`) :
 | Variable | Défaut | Rôle |
 |---|---|---|
 | `PORT` | `3000` | Port d'écoute du serveur |
-| `DATA_DIR` | `./data` | Dossier de `trame.db` (base SQLite) et des images générées |
+| `GCLOUD_PROJECT` | `trame-dev` | ID du projet Firebase/GCP (Firestore + Cloud Storage) |
+| `FIRESTORE_EMULATOR_HOST` | — | Pointe vers l'émulateur Firestore local au lieu du vrai projet |
+| `FIREBASE_STORAGE_EMULATOR_HOST` | — | Pointe vers l'émulateur Cloud Storage local au lieu du vrai bucket |
 
 ## Structure du projet
 
 ```
 server.js                    → routes de l'API Express
-lib/db.js                    → base de données (SQLite via better-sqlite3, voir son en-tête)
-lib/schema.sql                → schéma des tables
-lib/backup.js                 → sauvegardes glissantes de trame.db
+lib/db.js                    → base de données (Firestore via firebase-admin, voir son en-tête)
+lib/storage.js                → images (Cloud Storage via firebase-admin, voir son en-tête)
+lib/schema.sql                → forme des anciennes tables SQL, gardée en référence documentaire
 lib/promptBuilder.js         → assemblage des prompts en couches envoyés à l'IA
 lib/gameEngine.js            → logique de jeu : mondes, sauvegardes, tours, mémoire
 lib/memoryFacts.js            → forme partagée des faits mémoire (gameEngine.js + roles/archivist.js)

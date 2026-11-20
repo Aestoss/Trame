@@ -1,10 +1,6 @@
 const fetch = require('node-fetch');
-const fs = require('fs');
-const path = require('path');
 const { v4: uuid } = require('uuid');
-
-const dataDir = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
-const imagesDir = path.join(dataDir, 'images');
+const { saveImage } = require('../lib/storage');
 
 // Returns a URL (or base64 data URL) for the generated image, or null.
 
@@ -119,19 +115,20 @@ const providers = { stability: callStability, replicate: callReplicate, localsd:
 // which only caps turn images, not world covers or character portraits).
 // That's a confirmed, real production incident: it drove memory usage up
 // until the container's OOM killer fired mid-write, which corrupted the
-// database once already (see Fogbound's lib/dbAdapter.js). Writing the bytes to disk
-// here instead, and only ever putting a short /images/<file> path in
-// the database, removes the actual cause of those OOM kills rather than just
-// tolerating them -- the database now stays plain-text-sized permanently.
-function persistIfDataUri(result) {
+// database once already (see Fogbound's lib/dbAdapter.js). Uploading the
+// bytes to Cloud Storage here instead, and only ever putting a short
+// /images/<file> path in the database, removes the actual cause of those
+// OOM kills rather than just tolerating them -- the database now stays
+// plain-text-sized permanently, and the bytes live somewhere Cloud Run's
+// own ephemeral disk can't lose them.
+async function persistIfDataUri(result) {
   if (!result || !result.startsWith('data:')) return result; // null, or already an external URL -- nothing to do
   const match = /^data:([^;]+);base64,(.+)$/s.exec(result);
   if (!match) return result;
   const [, mime, base64] = match;
   const ext = (mime.split('/')[1] || 'png').replace(/[^a-z0-9]/gi, '') || 'png';
-  fs.mkdirSync(imagesDir, { recursive: true });
   const filename = `${uuid()}.${ext}`;
-  fs.writeFileSync(path.join(imagesDir, filename), Buffer.from(base64, 'base64'));
+  await saveImage(filename, Buffer.from(base64, 'base64'), mime);
   return `/images/${filename}`;
 }
 

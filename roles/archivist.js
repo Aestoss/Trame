@@ -20,6 +20,7 @@ const { normalizeNewFact, newMemoryFact } = require('../lib/memoryFacts');
 const { embedFact } = require('../lib/embedFact');
 const { getBackgroundModelConfig } = require('../lib/backgroundModel');
 const { applyOutfitChange } = require('../lib/characterOutfits');
+const { checkForSupersededFacts } = require('./supersede');
 
 // Model choice: see lib/backgroundModel.js -- a fixed, cheap model
 // (gemini-3.5-flash-lite) once settings.backgroundModel.apiKey is set,
@@ -39,7 +40,7 @@ async function extractFacts({ worldId, saveId, turnNumber, playerAction, chapter
       provider, system, user, apiKey, model, baseUrl
     });
     raw = result.text;
-    recordCost({ worldId, saveId, kind: 'archivist', provider, model, usage: result.usage });
+    await recordCost({ worldId, saveId, kind: 'archivist', provider, model, usage: result.usage });
   } catch (e) {
     // Never surfaces anywhere the player can see -- the chapter they read
     // was already correct; a missed extraction just means today's facts
@@ -64,8 +65,9 @@ async function extractFacts({ worldId, saveId, turnNumber, playerAction, chapter
     if (!fact) continue;
     const row = newMemoryFact({ saveId, turnNumber, fact, character, type, knownBy });
     row.embedding = await embedFact(fact, settings, `save ${saveId}, turn ${turnNumber}`);
-    db.get('memoryFacts').push(row).write();
+    await db.get('memoryFacts').push(row).write();
     written++;
+    await checkForSupersededFacts({ worldId, saveId, turnNumber, newFact: row, settings });
   }
 
   let outfitsChanged = 0;
@@ -75,7 +77,7 @@ async function extractFacts({ worldId, saveId, turnNumber, playerAction, chapter
     const description = typeof rawOutfit.description === 'string' ? rawOutfit.description.trim() : '';
     const reason = typeof rawOutfit.reason === 'string' ? rawOutfit.reason.trim() : null;
     if (!character || !description) continue;
-    applyOutfitChange(saveId, turnNumber, character, description, reason);
+    await applyOutfitChange(saveId, turnNumber, character, description, reason);
     outfitsChanged++;
   }
 

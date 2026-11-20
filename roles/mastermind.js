@@ -44,7 +44,7 @@ async function reviewPlan({ worldId, saveId, turnNumber, world, previousPlan, re
       provider, system, user, apiKey, model, baseUrl
     });
     raw = result.text;
-    recordCost({ worldId, saveId, kind: 'mastermind', provider, model, usage: result.usage });
+    await recordCost({ worldId, saveId, kind: 'mastermind', provider, model, usage: result.usage });
   } catch (e) {
     // Never surfaces anywhere the player can see, same reasoning as the
     // Archivist/Proofreader's own catches: a missed review just means the
@@ -70,7 +70,8 @@ async function reviewPlan({ worldId, saveId, turnNumber, world, previousPlan, re
 
   const newId = uuid();
   if (previousPlan && previousPlan.id) {
-    db.get('mastermindPlans').find({ id: previousPlan.id }).assign({ status: 'superseded', supersededBy: newId }).write();
+    const ref = await db.get('mastermindPlans').find({ id: previousPlan.id });
+    await ref.assign({ status: 'superseded', supersededBy: newId }).write();
   }
   const beats = Array.isArray(plan.beats) ? plan.beats.filter(b => typeof b === 'string' && b.trim()).map(b => b.trim()) : [];
   const summary = typeof plan.summary === 'string' ? plan.summary.trim() : '';
@@ -83,7 +84,7 @@ async function reviewPlan({ worldId, saveId, turnNumber, world, previousPlan, re
   // same one-embedding-per-version economy as memoryFacts, not a fresh
   // embedding call every single turn just to re-ask the same question.
   const embedding = await embedFact(`${summary} ${beats.join(' ')}`.trim(), settings, `mastermind plan, save ${saveId}, turn ${turnNumber}`);
-  db.get('mastermindPlans').push({
+  await db.get('mastermindPlans').push({
     id: newId,
     saveId,
     turnNumber,
